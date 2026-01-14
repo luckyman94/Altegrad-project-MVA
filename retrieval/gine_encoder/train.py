@@ -111,7 +111,7 @@ def main():
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    # --- Load embeddings ---
+    #Load embeddings
     train_emb = load_id2emb(args.train_emb)
     val_emb = load_id2emb(args.val_emb) if args.val_emb and os.path.exists(args.val_emb) else None
 
@@ -122,7 +122,7 @@ def main():
         print(f"Error: Preprocessed graphs not found at {args.train_graphs}")
         return
 
-    # --- Dataset / Loader ---
+    #Dataloader
     train_ds = PreprocessedGraphDataset(args.train_graphs, train_emb)
     train_dl = DataLoader(
         train_ds,
@@ -131,11 +131,11 @@ def main():
         collate_fn=collate_fn
     )
 
-    # --- Model ---
+    #Model
     mol_enc = MolGNN(out_dim=emb_dim).to(device)
     optimizer = torch.optim.Adam(mol_enc.parameters(), lr=args.lr)
 
-    # --- Training loop ---
+    #Training loop
     for ep in range(args.epochs):
         train_loss = train_epoch_InfoNCE(
             mol_enc,
@@ -161,6 +161,9 @@ def main():
             f"- val={val_scores}"
         )
 
-    # --- Save model ---
+    #Save model
     torch.save(mol_enc.state_dict(), args.output_model)
     print(f"\nModel saved to {args.output_model}")
+
+
+
