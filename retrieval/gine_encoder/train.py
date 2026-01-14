@@ -62,7 +62,7 @@ def train_epoch_InfoNCE(mol_enc, loader, optimizer, device):
 
     return total_loss / total
 
-from losses.infonce import infonce_similarity
+
 
 @torch.no_grad()
 def eval_retrieval(data_path, emb_dict, mol_enc, device, temperature=0.07):
@@ -84,7 +84,7 @@ def eval_retrieval(data_path, emb_dict, mol_enc, device, temperature=0.07):
     all_mol = torch.cat(all_mol, dim=0)
     all_txt = torch.cat(all_txt, dim=0)
 
-    sims = infonce_similarity(all_mol, all_txt, temperature)
+    sims = infonce_loss(all_mol, all_txt, temperature)
 
     ranks = sims.argsort(dim=-1, descending=True)
 
