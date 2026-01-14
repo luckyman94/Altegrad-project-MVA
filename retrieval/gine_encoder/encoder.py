@@ -8,11 +8,6 @@ from torch.utils.data import DataLoader
 from torch_geometric.data import Batch
 from torch_geometric.nn import GCNConv,GINEConv, global_add_pool
 
-from data_utils import (
-    load_id2emb,
-    PreprocessedGraphDataset, collate_fn
-)
-
 
 class AtomEncoder(nn.Module):
     def __init__(self, hidden_dim):
