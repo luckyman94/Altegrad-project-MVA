@@ -79,3 +79,15 @@ python ../../retrieval/simple_retrieval.py \
   --output_csv ./submission.csv
 ```
 
+Retrieval with top k can be performed by doing 
+
+```bash
+!python ../../retrieval/retrieval_top_k.py \
+--encoder gps \
+--model_path model.pt \
+--train_graphs ../../data/train_graphs.pkl \
+--test_graphs ../../data/test_graphs.pkl \
+--train_emb ./data/train_embeddings_sentence-transformers_all-MiniLM-L6-v2.csv \
+--output_csv ./submission.csv \
+--topk 10
+```
