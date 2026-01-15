@@ -9,15 +9,10 @@ from typing import List, Optional
 def fuse_soft_tokens_and_rag(
     llm,
     tokenizer,
-    soft_tokens: torch.Tensor,                 # [B, S, D]
+    soft_tokens: torch.Tensor,                 
     retrieved_texts: List[Optional[List[str]]],
     device: torch.device,
 ):
-    """
-    Returns:
-        inputs_embeds: [B, T, D]
-        attention_mask: [B, T]
-    """
 
     emb_layer = llm.get_input_embeddings()
     model_dtype = emb_layer.weight.dtype
@@ -27,7 +22,6 @@ def fuse_soft_tokens_and_rag(
     batch_inputs = []
     batch_attn = []
 
-    # BOS token (fallback EOS if BOS missing)
     bos_id = tokenizer.bos_token_id
     if bos_id is None:
         bos_id = tokenizer.eos_token_id
@@ -47,9 +41,6 @@ def fuse_soft_tokens_and_rag(
             and any(t.strip() != "" for t in texts)
         )
 
-        # -------------------------
-        # Prompt construction
-        # -------------------------
         if has_context:
             context = "\n".join(t.strip() for t in texts if t.strip() != "")
             prompt = (
@@ -72,21 +63,14 @@ def fuse_soft_tokens_and_rag(
 
         emb_prompt = emb_layer(tok.input_ids).squeeze(0).to(model_dtype)
 
-        # -------------------------
-        # CRITICAL FIX:
-        # Add BOS to force generation
-        # -------------------------
         fused = torch.cat(
             [soft_i, emb_prompt, bos_emb],
             dim=0,
-        )  # [T, D]
+        )  
 
         batch_inputs.append(fused)
         batch_attn.append(torch.ones(fused.size(0), device=device))
 
-    # -------------------------
-    # Padding
-    # -------------------------
     inputs_embeds = torch.nn.utils.rnn.pad_sequence(
         batch_inputs,
         batch_first=True,
