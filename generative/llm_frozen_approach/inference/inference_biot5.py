@@ -16,9 +16,6 @@ from llm_frozen_approach.models.mapper import LinearMapper
 from llm_frozen_approach.models.biot5 import load_biot5
 
 
-# -------------------------------------------------
-# Load trained GraphEncoder + Mapper
-# -------------------------------------------------
 def load_trained_model(checkpoint_path, device, llm_dim):
     ckpt = torch.load(checkpoint_path, map_location=device)
 
@@ -49,9 +46,6 @@ def load_trained_model(checkpoint_path, device, llm_dim):
     return graph_encoder, mapper
 
 
-# -------------------------------------------------
-# BioT5 generation from graphs
-# -------------------------------------------------
 @torch.no_grad()
 def generate_from_graphs_biot5(
     graphs,
@@ -65,12 +59,11 @@ def generate_from_graphs_biot5(
 ):
     graph_batch = Batch.from_data_list(graphs).to(device)
 
-    graph_emb = graph_encoder(graph_batch)   # (B, D)
-    soft_prompt = mapper(graph_emb)          # (B, S, D)
+    graph_emb = graph_encoder(graph_batch)   
+    soft_prompt = mapper(graph_emb)          
 
     B, S, D = soft_prompt.shape
 
-    # 🔑 MUST be identical to training
     prompt_text = "Describe the following molecule:"
     prompt_ids = tokenizer(
         prompt_text,
@@ -116,9 +109,6 @@ def generate_from_graphs_biot5(
     return texts
 
 
-# -------------------------------------------------
-# Run inference
-# -------------------------------------------------
 def run_inference_on_test(
     test_graphs_path,
     checkpoint_path,
@@ -167,9 +157,6 @@ def run_inference_on_test(
     return results
 
 
-# -------------------------------------------------
-# CLI
-# -------------------------------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("BioT5 inference")
 
