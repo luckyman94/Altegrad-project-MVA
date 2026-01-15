@@ -116,7 +116,7 @@ def run_inference_on_test(
         collate_fn=lambda x: x,
     )
 
-    llm, tokenizer = load_llm(args.llm, device)
+    llm, tokenizer,_ = load_llm(args.llm, device)
     graph_encoder, mapper = load_trained_model(checkpoint_path, device)
 
     graph_encoder.to(device)
