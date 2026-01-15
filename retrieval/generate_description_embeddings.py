@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--max_length", type=int, default=128)
     parser.add_argument("--pooling", type=str, choices=["cls", "mean", "last"], default="cls")
-    parser.add_argument("--splits", nargs="+", default=["train", "validation"])
+    parser.add_argument("--splits", nargs="+", default=["train", "validation", "test"])
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
