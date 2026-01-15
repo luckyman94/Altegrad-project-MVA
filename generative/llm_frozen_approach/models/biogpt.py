@@ -16,7 +16,7 @@ def load_biogpt(
 
     llm = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=dtype,
+        torch_dtype=torch.float32,
     ).to(device)
 
     
