@@ -28,10 +28,11 @@ from sft_llm_mapper.models.llm_factory import load_llm
 # ======================================================
 SYSTEM_PROMPT = (
     "You are an expert chemist. "
-    "Describe the molecule concisely, focusing on functional groups and properties."
+    "Describe the molecule concisely, focusing on its functional groups and properties."
 )
 
-USER_TEMPLATE = "SMILES: {smiles}\nDescription:"
+USER_TEMPLATE = "Molecule description:"
+
 
 
 # ======================================================
@@ -48,9 +49,10 @@ class GraphTextSFTDataset(Dataset):
         g = self.ds[idx]
         return {
             "graph": g,
-            "prompt": SYSTEM_PROMPT + "\n\n" + USER_TEMPLATE.format(smiles=g.smiles),
+            "prompt": SYSTEM_PROMPT + "\n\n" + USER_TEMPLATE,
             "target": g.description,
         }
+
 
 
 def collate_sft(batch):
