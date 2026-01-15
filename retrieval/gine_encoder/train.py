@@ -166,4 +166,5 @@ def main():
     print(f"\nModel saved to {args.output_model}")
 
 
-
+if __name__ == "__main__":
+    main()
