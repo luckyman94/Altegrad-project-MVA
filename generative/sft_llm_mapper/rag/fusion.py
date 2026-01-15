@@ -2,41 +2,66 @@ import torch
 from typing import List
 
 
+from typing import List, Optional
+
+
 @torch.no_grad()
 def fuse_soft_tokens_and_rag(
     llm,
     tokenizer,
-    soft_tokens,
-    retrieved_texts,
-    device,
+    soft_tokens: torch.Tensor,                 # [B, S, D]
+    retrieved_texts: List[Optional[List[str]]],
+    device: torch.device,
 ):
+    """
+    Returns:
+        inputs_embeds: [B, T, D]
+        attention_mask: [B, T]
+    """
+
     emb_layer = llm.get_input_embeddings()
     model_dtype = emb_layer.weight.dtype
 
-    soft_tokens = soft_tokens.to(model_dtype)
+    soft_tokens = soft_tokens.to(device=device, dtype=model_dtype)
 
     batch_inputs = []
+    batch_attn = []
+
+    # BOS token (fallback EOS if BOS missing)
+    bos_id = tokenizer.bos_token_id
+    if bos_id is None:
+        bos_id = tokenizer.eos_token_id
+
+    bos_emb = emb_layer(
+        torch.tensor([[bos_id]], device=device)
+    ).squeeze(0)  # [1, D]
 
     for i in range(soft_tokens.size(0)):
         soft_i = soft_tokens[i]  # [S, D]
 
-        # -------------------------
-        # CASE 1 — RAG available
-        # -------------------------
-        if retrieved_texts[i] is not None:
-            context = "\n".join(retrieved_texts[i])
+        texts = retrieved_texts[i]
 
+        has_context = (
+            texts is not None
+            and len(texts) > 0
+            and any(t.strip() != "" for t in texts)
+        )
+
+        # -------------------------
+        # Prompt construction
+        # -------------------------
+        if has_context:
+            context = "\n".join(t.strip() for t in texts if t.strip() != "")
             prompt = (
                 "Context:\n"
                 f"{context}\n\n"
-                "Task: Describe the molecule."
+                "Task: Describe the molecule using the context above.\n"
             )
-
-        # -------------------------
-        # CASE 2 — NO RAG
-        # -------------------------
         else:
-            prompt = "Describe the molecule."
+            prompt = (
+                "Task: Describe the molecule based on its molecular graph.\n"
+                "Focus on functional groups and chemical properties.\n"
+            )
 
         tok = tokenizer(
             prompt,
@@ -45,17 +70,31 @@ def fuse_soft_tokens_and_rag(
             padding=False,
         ).to(device)
 
-        emb_prompt = emb_layer(tok.input_ids).squeeze(0)
-        emb_prompt = emb_prompt.to(model_dtype)
+        emb_prompt = emb_layer(tok.input_ids).squeeze(0).to(model_dtype)
 
+        # -------------------------
+        # CRITICAL FIX:
+        # Add BOS to force generation
+        # -------------------------
         fused = torch.cat(
-            [soft_i, emb_prompt],
+            [soft_i, emb_prompt, bos_emb],
             dim=0,
-        )
+        )  # [T, D]
 
         batch_inputs.append(fused)
+        batch_attn.append(torch.ones(fused.size(0), device=device))
 
-    return torch.nn.utils.rnn.pad_sequence(
+    # -------------------------
+    # Padding
+    # -------------------------
+    inputs_embeds = torch.nn.utils.rnn.pad_sequence(
         batch_inputs,
         batch_first=True,
     )
+
+    attention_mask = torch.nn.utils.rnn.pad_sequence(
+        batch_attn,
+        batch_first=True,
+    )
+
+    return inputs_embeds, attention_mask
