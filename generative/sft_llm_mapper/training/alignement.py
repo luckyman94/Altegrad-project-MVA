@@ -17,7 +17,6 @@ sys.path.append(str(ROOT))
 
 # ===== Project imports =====
 from data_utils import PreprocessedGraphDataset
-from sft_llm_mapper.models.encoder import load_graph_encoder_from_checkpoint
 from sft_llm_mapper.models.mapper import LinearMapper
 from sft_llm_mapper.models.llm_factory import load_llm_embedder
 from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
@@ -80,7 +79,11 @@ def train_stage1(
     batch_size,
     lr,
     out_ckpt,
+    dim_graph,
+    num_soft_tokens,
+    llm_name,
 ):
+
     graph_encoder.eval().to(device)
     for p in graph_encoder.parameters():
         p.requires_grad = False
@@ -158,13 +161,19 @@ def train_stage1(
         if va_loss < best_val:
             best_val = va_loss
             torch.save(
-                {
-                    "mapper_state": mapper.state_dict(),
-                    "epoch": epoch,
-                    "val_loss": va_loss,
-                },
-                out_ckpt,
-            )
+            {
+                "mapper_state": mapper.state_dict(),
+                "epoch": epoch,
+                "val_loss": va_loss,
+                "dim_graph": dim_graph,
+                "dim_llm": llm_embedder.hidden_size,
+                "num_soft_tokens": num_soft_tokens,
+                "llm": llm_name,
+            },
+            out_ckpt,
+        )
+
+
             print(f"✓ Saved best mapper → {out_ckpt}")
 
     return best_val
@@ -200,10 +209,11 @@ def main():
     device = args.device if torch.cuda.is_available() else "cpu"
 
     # -------- Load graph encoder --------
-    graph_encoder = load_graph_encoder_from_checkpoint(
-        model_path=args.graph_ckpt,
-        device=device,
-    )
+    graph_encoder = load_graph_encoder_simple(
+    ckpt_path=args.graph_ckpt,
+    device=device,
+)
+
 
     dim_graph = graph_encoder.cfg.out_dim
 
@@ -236,7 +246,11 @@ def main():
         batch_size=args.batch_size,
         lr=args.lr,
         out_ckpt=args.out_ckpt,
+        dim_graph=dim_graph,
+        num_soft_tokens=args.num_soft_tokens,
+        llm_name=args.llm,
     )
+
 
 
 if __name__ == "__main__":
