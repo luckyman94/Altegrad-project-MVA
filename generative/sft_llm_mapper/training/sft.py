@@ -13,7 +13,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch_geometric.data import Batch
 from tqdm import tqdm
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
 # ========= Project imports =========
