@@ -8,8 +8,8 @@ sys.path.append(str(ROOT))
 
 from data_utils import PreprocessedGraphDataset
 from llm_frozen_approach.models.encoder import GraphEncoder
-from models.mapper import LinearMapper
-from models.gpt2 import load_gpt2
+from llm_frozen_approach.models.mapper import LinearMapper
+from llm_frozen_approach.models.gpt2 import load_gpt2
 from torch_geometric.data import Batch
 import argparse
 from tqdm import tqdm
