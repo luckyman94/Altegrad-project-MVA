@@ -188,10 +188,8 @@ def main():
             patience_counter = 0
             torch.save(
             {
-                # poids
                 "graph_encoder_state_dict": graph_encoder.state_dict(),
 
-                # 🔑 config minimale
                 "gnn_hidden_dim": cfg.hidden_dim,
                 "gnn_out_dim": cfg.out_dim,
                 "num_layers": cfg.num_layers,

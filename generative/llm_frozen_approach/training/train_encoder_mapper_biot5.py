@@ -122,7 +122,7 @@ def main():
 
             with autocast():
                 g = graph_encoder(graph_batch)
-                soft_prompt = mapper(g)  # (B, S, D)
+                soft_prompt = mapper(g) 
 
                 B = labels.size(0)
                 enc_prompt = encoder_prompt_embeds.repeat(B, 1, 1)
