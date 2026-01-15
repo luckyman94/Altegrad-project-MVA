@@ -108,24 +108,16 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Device: {device}")
 
-    # --------------------------------------------------
-    # Paths
-    # --------------------------------------------------
     data_dir = Path(args.data_dir)
     train_graphs = data_dir / "train_graphs.pkl"
     val_graphs = data_dir / "validation_graphs.pkl"
 
-    # --------------------------------------------------
-    # Load text embeddings
-    # --------------------------------------------------
     train_text_emb = load_id2emb(args.train_emb)
     val_text_emb = load_id2emb(args.val_emb)
 
     out_dim = len(next(iter(train_text_emb.values())))
 
-    # --------------------------------------------------
-    # Datasets / loaders
-    # --------------------------------------------------
+    
     train_ds = PreprocessedGraphDataset(train_graphs, train_text_emb)
     val_ds = PreprocessedGraphDataset(val_graphs, val_text_emb)
 
@@ -142,9 +134,7 @@ def main():
         collate_fn=collate_fn,
     )
 
-    # --------------------------------------------------
-    # Model
-    # --------------------------------------------------
+    
     cfg = GraphEncoderConfig(
         hidden_dim=args.hidden_dim,
         out_dim=out_dim,
@@ -159,9 +149,7 @@ def main():
 
     print(f"Trainable params: {sum(p.numel() for p in graph_encoder.parameters() if p.requires_grad):,}")
 
-    # --------------------------------------------------
-    # Optimizer / scheduler
-    # --------------------------------------------------
+    
     optimizer = torch.optim.AdamW(
         graph_encoder.parameters(),
         lr=args.lr,
@@ -173,9 +161,7 @@ def main():
         T_max=args.epochs,
     )
 
-    # --------------------------------------------------
-    # Training loop
-    # --------------------------------------------------
+    
     best_mrr = 0.0
     patience_counter = 0
 
@@ -196,9 +182,7 @@ def main():
             f"R@5={metrics['R@5']:.4f}"
         )
 
-        # ----------------------------------------------
-        # Early stopping / checkpoint
-        # ----------------------------------------------
+     
         if metrics["MRR"] > best_mrr:
             best_mrr = metrics["MRR"]
             patience_counter = 0
