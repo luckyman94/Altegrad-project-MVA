@@ -9,6 +9,7 @@ import torch
 import numpy as np
 import faiss
 from tqdm import tqdm
+from torch_geometric.data import Batch
 
 # --------------------------------------------------
 # Path setup
@@ -66,7 +67,8 @@ def build_faiss_index(
     texts = []
 
     for g in tqdm(train_ds, desc="Encoding train graphs"):
-        z = graph_encoder(g.to(device).unsqueeze(0))  # [1, D]
+        batch = Batch.from_data_list([g]).to(device)
+        z = graph_encoder(batch)
         z = z.cpu().numpy()
         z = z / np.linalg.norm(z, axis=1, keepdims=True)  # cosine norm
 
