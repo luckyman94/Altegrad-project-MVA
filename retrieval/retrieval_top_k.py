@@ -1,5 +1,7 @@
 import argparse
 import os
+from collections import defaultdict
+
 import pandas as pd
 import torch
 import torch.nn.functional as F
@@ -12,14 +14,13 @@ from data_utils import (
     collate_fn,
 )
 
-
 from gine_encoder.encoder import MolGNN
-from gps_encoder.encoder import GraphEncoder, GraphEncoderConfig, load_graph_encoder_from_checkpoint
+from gps_encoder.encoder import load_graph_encoder_from_checkpoint
 
 
 
 @torch.no_grad()
-def retrieve_descriptions_top_k(
+def retrieve_descriptions_topk_weighted(
     model,
     train_graphs,
     test_graphs,
@@ -27,6 +28,7 @@ def retrieve_descriptions_top_k(
     device,
     output_csv,
     topk=5,
+    batch_size=64,
 ):
     train_id2desc = load_descriptions_from_graphs(train_graphs)
 
@@ -40,50 +42,64 @@ def retrieve_descriptions_top_k(
 
     test_ds = PreprocessedGraphDataset(test_graphs)
     test_dl = DataLoader(
-        test_ds, batch_size=64, shuffle=False, collate_fn=collate_fn
+        test_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=collate_fn,
     )
 
     test_embs, test_ids = [], []
+    ptr = 0
 
     for graphs in test_dl:
         graphs = graphs.to(device)
-        emb = model(graphs)
-        test_embs.append(emb)
+        z = model(graphs)
+        z = F.normalize(z, dim=-1)
 
-        start = len(test_ids)
-        test_ids.extend(test_ds.ids[start : start + graphs.num_graphs])
+        test_embs.append(z)
+
+        bs = graphs.num_graphs
+        test_ids.extend(test_ds.ids[ptr : ptr + bs])
+        ptr += bs
 
     test_embs = torch.cat(test_embs, dim=0)
     print(f"Encoded {test_embs.size(0)} test molecules")
 
     sims = test_embs @ train_embs.t()
-
     topk_vals, topk_idx = sims.topk(topk, dim=-1)
-    topk_idx = topk_idx.cpu()
+
     topk_vals = topk_vals.cpu()
+    topk_idx = topk_idx.cpu()
 
     results = []
+
     for i, test_id in enumerate(test_ids):
-        for rank in range(topk):
-            train_id = train_ids[topk_idx[i, rank]]
-            results.append({
-                "test_id": test_id,
-                "rank": rank + 1,
-                "train_id": train_id,
-                "score": topk_vals[i, rank].item(),
-                "description": train_id2desc[train_id],
-            })
+        scores = defaultdict(float)
+
+        for r in range(topk):
+            train_id = train_ids[topk_idx[i, r]]
+            sim = topk_vals[i, r].item()
+            scores[train_id] += sim  
+
+        best_train_id = max(scores, key=scores.get)
+        final_desc = train_id2desc[best_train_id]
+
+        results.append({
+            "ID": test_id,
+            "description": final_desc,
+        })
 
         if i < 3:
             print(f"\nTest ID {test_id}")
-            for r in range(min(topk, 3)):
-                tid = train_ids[topk_idx[i, r]]
-                print(f"  #{r+1} → {tid} | score={topk_vals[i,r]:.3f}")
-                print(train_id2desc[tid][:120], "...")
+            for tid, sc in sorted(scores.items(), key=lambda x: -x[1]):
+                print(f"  {tid}: {sc:.3f}")
+            print("→ Selected:")
+            print(final_desc[:120], "...")
 
+    
     df = pd.DataFrame(results)
     df.to_csv(output_csv, index=False)
-    print(f"\nSaved top-{topk} retrievals for {len(test_ids)} molecules → {output_csv}")
+    print(f"\nSaved submission CSV → {output_csv}")
 
     return df
 
@@ -91,7 +107,7 @@ def retrieve_descriptions_top_k(
 
 
 def parse_args():
-    p = argparse.ArgumentParser("Graph-to-text retrieval")
+    p = argparse.ArgumentParser("Graph-to-text top-k weighted retrieval")
 
     p.add_argument("--encoder", type=str, required=True,
                    choices=["gine", "gps"],
@@ -101,16 +117,18 @@ def parse_args():
     p.add_argument("--train_graphs", type=str, required=True)
     p.add_argument("--test_graphs", type=str, required=True)
     p.add_argument("--train_emb", type=str, required=True)
-    p.add_argument("--topk", type=int, default=1,
-               help="Number of retrieved descriptions per test molecule")
 
+    p.add_argument("--topk", type=int, default=5,
+                   help="Number of neighbors used in weighted vote")
 
-    p.add_argument("--output_csv", type=str, default="retrieved_descriptions.csv")
+    p.add_argument("--batch_size", type=int, default=64)
+    p.add_argument("--output_csv", type=str, required=True)
     p.add_argument("--device", type=str, default="cuda")
 
     return p.parse_args()
 
 
+    
 
 def main():
     args = parse_args()
@@ -123,34 +141,39 @@ def main():
     if not os.path.exists(args.model_path):
         raise FileNotFoundError(args.model_path)
 
+    
     train_emb = load_id2emb(args.train_emb)
     emb_dim = len(next(iter(train_emb.values())))
 
+    
     print(f"Loading model from {args.model_path}")
+
     if args.encoder == "gine":
         model = MolGNN(out_dim=emb_dim).to(device)
-        model.load_state_dict(torch.load(args.model_path, map_location=device))
+        model.load_state_dict(
+            torch.load(args.model_path, map_location=device)
+        )
         model.eval()
 
     elif args.encoder == "gps":
-        cfg = GraphEncoderConfig(out_dim=emb_dim)
-        model = GraphEncoder(cfg).to(device)
-        model.load_state_dict(torch.load(args.model_path, map_location=device))
-        model.eval()
-    
+        model = load_graph_encoder_from_checkpoint(
+            model_path=args.model_path,
+            device=device,
+        )
+
     else:
         raise ValueError(f"Unknown encoder {args.encoder}")
 
     
-    
-
-    retrieve_descriptions_top_k(
+    retrieve_descriptions_topk_weighted(
         model=model,
         train_graphs=args.train_graphs,
         test_graphs=args.test_graphs,
         train_emb_dict=train_emb,
         device=device,
         output_csv=args.output_csv,
+        topk=args.topk,
+        batch_size=args.batch_size,
     )
 
 
