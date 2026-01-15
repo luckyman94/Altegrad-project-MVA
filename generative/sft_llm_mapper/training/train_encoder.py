@@ -186,7 +186,24 @@ def main():
         if metrics["MRR"] > best_mrr:
             best_mrr = metrics["MRR"]
             patience_counter = 0
-            torch.save(graph_encoder.state_dict(), args.out_ckpt)
+            torch.save(
+            {
+                # poids
+                "graph_encoder_state_dict": graph_encoder.state_dict(),
+
+                # 🔑 config minimale
+                "gnn_hidden_dim": cfg.hidden_dim,
+                "gnn_out_dim": cfg.out_dim,
+                "num_layers": cfg.num_layers,
+                "num_heads": cfg.num_heads,
+                "dropout": cfg.dropout,
+                "attn_type": cfg.attn_type,
+                "pool": cfg.pool,
+                "normalize_out": cfg.normalize_out,
+            },
+            args.out_ckpt,
+        )
+
             print(f"  → New best MRR: {best_mrr:.4f} | saved {args.out_ckpt}")
         else:
             patience_counter += 1

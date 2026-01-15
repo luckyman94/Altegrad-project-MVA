@@ -20,6 +20,7 @@ from data_utils import PreprocessedGraphDataset
 from sft_llm_mapper.models.encoder import load_graph_encoder_from_checkpoint
 from sft_llm_mapper.models.mapper import LinearMapper
 from sft_llm_mapper.models.llm_factory import load_llm_embedder
+from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
 
 
 # ======================================================
@@ -43,6 +44,26 @@ def collate_stage1(batch: List[Tuple]):
     graphs = Batch.from_data_list([g for g, _ in batch])
     texts = [t for _, t in batch]
     return graphs, texts
+
+def load_graph_encoder_simple(ckpt_path, device):
+    ckpt = torch.load(ckpt_path, map_location=device)
+
+    cfg = GraphEncoderConfig(
+        hidden_dim=ckpt["gnn_hidden_dim"],
+        out_dim=ckpt["gnn_out_dim"],
+        num_layers=ckpt["num_layers"],
+        num_heads=ckpt["num_heads"],
+        dropout=ckpt["dropout"],
+        attn_type=ckpt["attn_type"],
+        pool=ckpt["pool"],
+        normalize_out=ckpt["normalize_out"],
+    )
+
+    model = GraphEncoder(cfg).to(device)
+    model.load_state_dict(ckpt["graph_encoder_state_dict"])
+    model.eval()
+
+    return model
 
 
 # ======================================================
