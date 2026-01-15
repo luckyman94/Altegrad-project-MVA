@@ -40,8 +40,8 @@ def load_trained_model(checkpoint_path, device, llm_dim):
         num_soft_tokens=ckpt["num_soft_tokens"],
     ).to(device)
 
-    graph_encoder.load_state_dict(ckpt["graph_encoder_state_dict"])
-    mapper.load_state_dict(ckpt["mapper_state_dict"])
+    graph_encoder.load_state_dict(ckpt["graph_encoder"])
+    mapper.load_state_dict(ckpt["mapper"])
 
     graph_encoder.eval()
     mapper.eval()
