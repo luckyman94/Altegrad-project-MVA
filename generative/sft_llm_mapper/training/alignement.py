@@ -18,7 +18,7 @@ from sft_llm_mapper.models.llm_factory import load_llm_embedder
 from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
 
 
-class GraphTextAlignmentDataset(Dataset):
+class DatasetForAlignementMapper(Dataset):
     def __init__(self, base: PreprocessedGraphDataset):
         self.base = base
 
@@ -32,7 +32,7 @@ class GraphTextAlignmentDataset(Dataset):
         return g, g.description
 
 
-def collate_stage1(batch: List[Tuple]):
+def collate_alignement(batch: List[Tuple]):
     graphs = Batch.from_data_list([g for g, _ in batch])
     texts = [t for _, t in batch]
     return graphs, texts
@@ -58,7 +58,7 @@ def load_graph_encoder_simple(ckpt_path, device):
     return model
 
 
-def train_stage1(
+def train_alignement(
     graph_encoder,
     mapper,
     llm_embedder,
@@ -90,16 +90,16 @@ def train_stage1(
     criterion = nn.MSELoss()
 
     train_loader = DataLoader(
-        GraphTextAlignmentDataset(train_ds),
+        DatasetForAlignementMapper(train_ds),
         batch_size=batch_size,
         shuffle=True,
-        collate_fn=collate_stage1,
+        collate_fn=collate_alignement,
     )
     val_loader = DataLoader(
-        GraphTextAlignmentDataset(val_ds),
+        DatasetForAlignementMapper(val_ds),
         batch_size=batch_size,
         shuffle=False,
-        collate_fn=collate_stage1,
+        collate_fn=collate_alignement,
     )
 
     best_val = float("inf")
@@ -108,7 +108,7 @@ def train_stage1(
         mapper.train()
         tr_loss = 0.0
 
-        for graphs, texts in tqdm(train_loader, desc=f"Stage1 {epoch} [train]"):
+        for graphs, texts in tqdm(train_loader, desc=f"Alignement {epoch} [train]"):
             graphs = graphs.to(device)
             optimizer.zero_grad(set_to_none=True)
 
@@ -132,7 +132,7 @@ def train_stage1(
         va_loss = 0.0
 
         with torch.no_grad():
-            for graphs, texts in tqdm(val_loader, desc=f"Stage1 {epoch} [val]"):
+            for graphs, texts in tqdm(val_loader, desc=f"Alignement {epoch} [val]"):
                 graphs = graphs.to(device)
                 g_emb = graph_encoder(graphs)
                 soft = mapper(g_emb).mean(dim=1)
@@ -142,7 +142,7 @@ def train_stage1(
         va_loss /= max(1, len(val_loader))
 
         print(
-            f"[Stage1] epoch={epoch} "
+            f"[Alignement] epoch={epoch} "
             f"train={tr_loss:.4f} val={va_loss:.4f}"
         )
 
@@ -168,7 +168,7 @@ def train_stage1(
 
 
 def parse_args():
-    p = argparse.ArgumentParser("Stage-1 Graph → LLM Alignment")
+    p = argparse.ArgumentParser("Alignement Graph → LLM")
 
     p.add_argument("--llm", type=str, choices=["gpt2", "biogpt"], required=True)
     p.add_argument("--graph_ckpt", type=str, required=True)
@@ -180,7 +180,7 @@ def parse_args():
     p.add_argument("--batch_size", type=int, default=16)
     p.add_argument("--lr", type=float, default=3e-4)
 
-    p.add_argument("--out_ckpt", type=str, default="stage1_mapper.pt")
+    p.add_argument("--out_ckpt", type=str, default="alignement_mapper.pt")
     p.add_argument("--device", type=str, default="cuda")
 
     return p.parse_args()
@@ -211,7 +211,7 @@ def main():
     train_ds = PreprocessedGraphDataset(args.train_data)
     val_ds = PreprocessedGraphDataset(args.val_data)
 
-    train_stage1(
+    train_alignement(
         graph_encoder=graph_encoder,
         mapper=mapper,
         llm_embedder=llm_embedder,

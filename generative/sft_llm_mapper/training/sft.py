@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import argparse
 import os
 import sys
@@ -16,16 +13,12 @@ from tqdm import tqdm
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
-# ========= Project imports =========
 from data_utils import PreprocessedGraphDataset
 from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
 from sft_llm_mapper.models.mapper import LinearMapper
 from sft_llm_mapper.models.llm_factory import load_llm
 
 
-# ======================================================
-# Prompting
-# ======================================================
 SYSTEM_PROMPT = (
     "You are an expert chemist. "
     "Describe the molecule concisely, focusing on its functional groups and properties."
@@ -35,9 +28,6 @@ USER_TEMPLATE = "Molecule description:"
 
 
 
-# ======================================================
-# Dataset
-# ======================================================
 class GraphTextSFTDataset(Dataset):
     def __init__(self, base_ds: PreprocessedGraphDataset):
         self.ds = base_ds
@@ -63,9 +53,6 @@ def collate_sft(batch):
     }
 
 
-# ======================================================
-# Utilities
-# ======================================================
 def build_inputs_with_soft_tokens(
     llm,
     tokenizer,
@@ -91,17 +78,11 @@ def build_inputs_with_soft_tokens(
     emb_layer = llm.get_input_embeddings()
     model_dtype = emb_layer.weight.dtype
 
-    # Cast soft tokens
     soft_tokens = soft_tokens.to(dtype=model_dtype)
 
-    # Embed prompt + target
     emb_prompt = emb_layer(tok_prompt.input_ids).to(dtype=model_dtype)
     emb_target = emb_layer(tok_target.input_ids).to(dtype=model_dtype)
 
-    # --------------------------------------------------
-    # inputs = [ soft | prompt | target ]
-    # labels = [ IGN  | IGN    | target ]
-    # --------------------------------------------------
     inputs_embeds = torch.cat(
         [soft_tokens, emb_prompt, emb_target],
         dim=1,
@@ -130,10 +111,7 @@ def build_inputs_with_soft_tokens(
     return inputs_embeds, labels
 
 
-# ======================================================
-# Stage-2 training
-# ======================================================
-def train_stage2(
+def train_sft(
     graph_encoder,
     mapper,
     llm,
@@ -185,12 +163,11 @@ def train_stage2(
 
     for epoch in range(1, epochs + 1):
 
-        # -------- TRAIN --------
         llm.train()
         mapper.train()
         tr_loss = 0.0
 
-        for batch in tqdm(train_loader, desc=f"Stage2 {epoch} [train]"):
+        for batch in tqdm(train_loader, desc=f"SFT {epoch} [train]"):
             optimizer.zero_grad()
 
             graphs = batch["graphs"].to(device)
@@ -222,13 +199,12 @@ def train_stage2(
 
         tr_loss /= len(train_loader)
 
-        # -------- VAL --------
         llm.eval()
         mapper.eval()
         va_loss = 0.0
 
         with torch.no_grad():
-            for batch in tqdm(val_loader, desc=f"Stage2 {epoch} [val]"):
+            for batch in tqdm(val_loader, desc=f"SFT {epoch} [val]"):
                 graphs = batch["graphs"].to(device)
                 z_graph = graph_encoder(graphs)
                 soft = mapper(z_graph)
@@ -248,7 +224,7 @@ def train_stage2(
         va_loss /= len(val_loader)
 
         print(
-            f"[Stage2] epoch={epoch} "
+            f"[SFT] epoch={epoch} "
             f"train={tr_loss:.4f} val={va_loss:.4f}"
         )
 
@@ -267,16 +243,13 @@ def train_stage2(
             llm.save_pretrained(os.path.join(out_dir, "lora"))
             tokenizer.save_pretrained(os.path.join(out_dir, "lora"))
 
-            print(f"✓ Saved best Stage-2 model")
+            print(f"✓ Saved best SFT model")
 
     return best_val
 
 
-# ======================================================
-# Main
-# ======================================================
 def main():
-    p = argparse.ArgumentParser("Stage-2 SFT (Graph → Text)")
+    p = argparse.ArgumentParser("SFT (Graph → Text)")
     p.add_argument("--train_data", required=True)
     p.add_argument("--val_data", required=True)
     p.add_argument("--encoder_ckpt", required=True)
@@ -286,13 +259,12 @@ def main():
     p.add_argument("--batch_size", type=int, default=8)
     p.add_argument("--lr_mapper", type=float, default=3e-4)
     p.add_argument("--lr_lora", type=float, default=1e-4)
-    p.add_argument("--out_dir", default="checkpoints/stage2")
+    p.add_argument("--out_dir", default="checkpoints/sft")
     p.add_argument("--device", default="cuda")
 
     args = p.parse_args()
     device = args.device if torch.cuda.is_available() else "cpu"
 
-    # -------- Encoder --------
     enc_ckpt = torch.load(args.encoder_ckpt, map_location=device)
     cfg = GraphEncoderConfig(
         hidden_dim=enc_ckpt["gnn_hidden_dim"],
@@ -307,7 +279,6 @@ def main():
     graph_encoder = GraphEncoder(cfg)
     graph_encoder.load_state_dict(enc_ckpt["graph_encoder_state_dict"])
 
-    # -------- Mapper --------
     mapper_ckpt = torch.load(args.mapper_ckpt, map_location=device)
     mapper = LinearMapper(
         dim_graph=mapper_ckpt["dim_graph"],
@@ -316,7 +287,6 @@ def main():
     )
     mapper.load_state_dict(mapper_ckpt["mapper_state"])
 
-    # -------- LLM + LoRA --------
     llm, tokenizer, _ = load_llm(
         llm_name=args.llm,
         device=device,
@@ -326,7 +296,7 @@ def main():
     train_ds = PreprocessedGraphDataset(args.train_data)
     val_ds = PreprocessedGraphDataset(args.val_data)
 
-    train_stage2(
+    train_sft(
         graph_encoder,
         mapper,
         llm,
