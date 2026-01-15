@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
 from data_utils import PreprocessedGraphDataset, x_map, e_map
