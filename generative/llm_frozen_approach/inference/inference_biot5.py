@@ -19,7 +19,7 @@ from llm_frozen_approach.models.biot5 import load_biot5
 # -------------------------------------------------
 # Load trained GraphEncoder + Mapper
 # -------------------------------------------------
-def load_trained_model(checkpoint_path, device):
+def load_trained_model(checkpoint_path, device, llm_dim):
     ckpt = torch.load(checkpoint_path, map_location=device)
 
     cfg = GraphEncoderConfig(
@@ -36,7 +36,7 @@ def load_trained_model(checkpoint_path, device):
 
     mapper = LinearMapper(
         dim_graph=ckpt["gnn_out_dim"],
-        dim_llm=ckpt["llm_dim"],
+        dim_llm=llm_dim,
         num_soft_tokens=ckpt["num_soft_tokens"],
     ).to(device)
 
@@ -136,7 +136,8 @@ def run_inference_on_test(
     )
 
     llm, tokenizer = load_biot5(device)
-    graph_encoder, mapper = load_trained_model(checkpoint_path, device)
+    llm_dim = llm.config.d_model
+    graph_encoder, mapper = load_trained_model(checkpoint_path, device, llm_dim)
 
     llm.eval()
     graph_encoder.eval()
