@@ -17,9 +17,6 @@ from sft_llm_mapper.models.mapper import LinearMapper
 from sft_llm_mapper.models.llm_factory import load_llm
 
 
-# ======================================================
-# Generation utils
-# ======================================================
 @torch.no_grad()
 def generate_batch(
     graphs,
@@ -33,8 +30,8 @@ def generate_batch(
 ):
     graphs = graphs.to(device)
 
-    z_graph = graph_encoder(graphs)        # [B, dim_graph]
-    soft = mapper(z_graph)                 # [B, S, dim_llm]
+    z_graph = graph_encoder(graphs)        
+    soft = mapper(z_graph)                 
 
     emb_layer = llm.get_input_embeddings()
     model_dtype = emb_layer.weight.dtype
@@ -65,11 +62,8 @@ def generate_batch(
     return texts
 
 
-# ======================================================
-# Main
-# ======================================================
 def main():
-    p = argparse.ArgumentParser("Graph → Text inference")
+    p = argparse.ArgumentParser("Graph to Text inference")
 
     p.add_argument("--test_data", required=True)
     p.add_argument("--encoder_ckpt", required=True)
@@ -90,9 +84,6 @@ def main():
     args = p.parse_args()
     device = args.device if torch.cuda.is_available() else "cpu"
 
-    # --------------------------------------------------
-    # Load test graphs
-    # --------------------------------------------------
     test_ds = PreprocessedGraphDataset(args.test_data)
     test_loader = torch.utils.data.DataLoader(
         test_ds,
@@ -101,9 +92,6 @@ def main():
         collate_fn=lambda x: x,
     )
 
-    # --------------------------------------------------
-    # Load encoder
-    # --------------------------------------------------
     enc_ckpt = torch.load(args.encoder_ckpt, map_location=device)
 
     cfg = GraphEncoderConfig(
@@ -121,9 +109,6 @@ def main():
     graph_encoder.load_state_dict(enc_ckpt["graph_encoder_state_dict"])
     graph_encoder.eval()
 
-    # --------------------------------------------------
-    # Load mapper
-    # --------------------------------------------------
     map_ckpt = torch.load(args.mapper_ckpt, map_location=device)
 
     mapper = LinearMapper(
@@ -135,13 +120,10 @@ def main():
     mapper.load_state_dict(map_ckpt["mapper_state"])
     mapper.eval()
 
-    # --------------------------------------------------
-    # Load LLM + LoRA
-    # --------------------------------------------------
     llm, tokenizer, _ = load_llm(
     llm_name=args.llm,
     device=device,
-    use_lora=False,   # important
+    use_lora=False,   
     )
 
     from peft import PeftModel
@@ -149,9 +131,6 @@ def main():
     llm.eval()
 
 
-    # --------------------------------------------------
-    # Inference
-    # --------------------------------------------------
     rows = []
 
     for batch in tqdm(test_loader, desc="Inference"):
@@ -170,14 +149,11 @@ def main():
         )
 
         for gid, txt in zip(ids, texts):
-            rows.append({"id": gid, "description": txt})
+            rows.append({"ID": gid, "description": txt})
 
-    # --------------------------------------------------
-    # Save
-    # --------------------------------------------------
     df = pd.DataFrame(rows)
     df.to_csv(args.out_csv, index=False)
-    print(f"\n✅ Saved predictions to {args.out_csv}")
+    print(f"Saved predictions to {args.out_csv}")
 
 
 if __name__ == "__main__":

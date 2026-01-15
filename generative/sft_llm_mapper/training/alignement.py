@@ -14,6 +14,8 @@ sys.path.append(str(ROOT))
 
 from data_utils import PreprocessedGraphDataset
 from sft_llm_mapper.models.mapper import LinearMapper
+from sft_llm_mapper.losses.infonce import infonce_loss
+
 from sft_llm_mapper.models.llm_factory import load_llm_embedder
 from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
 
@@ -87,7 +89,6 @@ def train_alignement(
         lr=lr,
         weight_decay=1e-4,
     )
-    criterion = nn.MSELoss()
 
     train_loader = DataLoader(
         DatasetForAlignementMapper(train_ds),
@@ -120,7 +121,8 @@ def train_alignement(
             with torch.no_grad():
                 tgt = llm_embedder.encode(texts)     
 
-            loss = criterion(soft, tgt)
+            loss = infonce_loss(soft, tgt)
+
             loss.backward()
             optimizer.step()
 
@@ -137,7 +139,7 @@ def train_alignement(
                 g_emb = graph_encoder(graphs)
                 soft = mapper(g_emb).mean(dim=1)
                 tgt = llm_embedder.encode(texts)
-                va_loss += criterion(soft, tgt).item()
+                va_loss += infonce_loss(soft, tgt).item()
 
         va_loss /= max(1, len(val_loader))
 
