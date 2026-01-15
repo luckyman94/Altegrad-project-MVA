@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
 from data_utils import PreprocessedGraphDataset
-from llm_frozen_approach.models.encoder import GraphEncoder
+from llm_frozen_approach.models.encoder import GraphEncoder, GraphEncoderConfig
 from llm_frozen_approach.models.mapper import LinearMapper
 from llm_frozen_approach.models.gpt2 import load_gpt2
 from torch_geometric.data import Batch
@@ -16,6 +16,7 @@ from tqdm import tqdm
 import os 
 from transformers import get_linear_schedule_with_warmup
 from dataset.dataset import GraphTextDataset, GraphOnlyDataset
+
 
 
 
@@ -152,11 +153,15 @@ def main():
         collate_fn=collate_fn,
     )
 
-    graph_encoder = GraphEncoder(
+    cfg = GraphEncoderConfig(
     hidden_dim=args.hidden_dim,
+    out_dim=llm.config.n_embd,  
     num_layers=4,
     num_heads=4,
-    ).to(device)
+    dropout=0.1,
+)
+
+    graph_encoder = GraphEncoder(cfg).to(device)    
 
 
     mapper = LinearMapper(
