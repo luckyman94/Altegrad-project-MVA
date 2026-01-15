@@ -11,6 +11,8 @@ from torch_geometric.data import Batch
 from tqdm import tqdm
 import pandas as pd
 
+from peft import PeftModel
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
@@ -19,18 +21,16 @@ from data_utils import PreprocessedGraphDataset
 from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
 from sft_llm_mapper.models.mapper import LinearMapper
 from sft_llm_mapper.models.llm_factory import load_llm
-from sft_llm_mapper.losses.infonce import infonce_loss
-
 from sft_llm_mapper.rag.fusion import fuse_soft_tokens_and_rag
 
 
 # ======================================================
-# Dummy Retriever (à remplacer plus tard)
+# Dummy Retriever (baseline)
 # ======================================================
 class DummyRetriever:
     """
     Baseline retriever : retourne toujours les mêmes textes.
-    Remplace-le par FAISS quand tu veux.
+    À remplacer par FAISS plus tard.
     """
 
     def __init__(self, texts: List[str]):
@@ -41,7 +41,7 @@ class DummyRetriever:
 
 
 # ======================================================
-# Generation
+# Generation (RAG)
 # ======================================================
 @torch.no_grad()
 def generate_batch_rag(
@@ -57,20 +57,14 @@ def generate_batch_rag(
 ):
     graphs = graphs.to(device)
 
-    # --------------------------------------------------
-    # Graph → soft tokens
-    # --------------------------------------------------
-    z_graph = graph_encoder(graphs)          # [B, Dg]
-    soft = mapper(z_graph)                   # [B, S, Dllm]
+    # -------- Graph → soft tokens --------
+    z_graph = graph_encoder(graphs)      # [B, Dg]
+    soft = mapper(z_graph)               # [B, S, Dllm]
 
-    # --------------------------------------------------
-    # Retrieve
-    # --------------------------------------------------
+    # -------- Retrieve --------
     retrieved_texts = retriever.search(z_graph, k=3)
 
-    # --------------------------------------------------
-    # Fuse soft + RAG
-    # --------------------------------------------------
+    # -------- Fuse soft + RAG --------
     inputs_embeds = fuse_soft_tokens_and_rag(
         llm=llm,
         tokenizer=tokenizer,
@@ -95,12 +89,7 @@ def generate_batch_rag(
         eos_token_id=tokenizer.eos_token_id,
     )
 
-    texts = tokenizer.batch_decode(
-        outputs,
-        skip_special_tokens=True,
-    )
-
-    return texts
+    return tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 
 # ======================================================
@@ -112,11 +101,14 @@ def main():
     p.add_argument("--test_data", required=True)
     p.add_argument("--encoder_ckpt", required=True)
     p.add_argument("--mapper_ckpt", required=True)
+
     p.add_argument("--llm", choices=["gpt2", "biogpt"], required=True)
+    p.add_argument("--lora_path", required=True, help="Path to trained LoRA adapter")
 
     p.add_argument("--batch_size", type=int, default=8)
     p.add_argument("--max_new_tokens", type=int, default=128)
     p.add_argument("--num_beams", type=int, default=1)
+
     p.add_argument("--device", default="cuda")
     p.add_argument("--out_csv", default="submission.csv")
 
@@ -124,7 +116,7 @@ def main():
     device = args.device if torch.cuda.is_available() else "cpu"
 
     # --------------------------------------------------
-    # Load dataset
+    # Dataset
     # --------------------------------------------------
     test_ds = PreprocessedGraphDataset(args.test_data)
     test_loader = torch.utils.data.DataLoader(
@@ -135,7 +127,7 @@ def main():
     )
 
     # --------------------------------------------------
-    # Load encoder
+    # Graph encoder
     # --------------------------------------------------
     enc_ckpt = torch.load(args.encoder_ckpt, map_location=device)
 
@@ -155,7 +147,7 @@ def main():
     graph_encoder.eval()
 
     # --------------------------------------------------
-    # Load mapper
+    # Mapper
     # --------------------------------------------------
     map_ckpt = torch.load(args.mapper_ckpt, map_location=device)
 
@@ -169,16 +161,23 @@ def main():
     mapper.eval()
 
     # --------------------------------------------------
-    # Load LLM (+ LoRA)
+    # LLM + LoRA (CORRECT)
     # --------------------------------------------------
     llm, tokenizer, _ = load_llm(
         llm_name=args.llm,
         device=device,
-        use_lora=True,
+        use_lora=False,   # ⬅️ important
     )
 
+    llm = PeftModel.from_pretrained(
+        llm,
+        args.lora_path,
+    ).to(device)
+
+    llm.eval()
+
     # --------------------------------------------------
-    # Retriever (baseline)
+    # Retriever
     # --------------------------------------------------
     retriever = DummyRetriever(
         texts=[
@@ -212,9 +211,8 @@ def main():
         for gid, txt in zip(ids, texts):
             rows.append({"ID": gid, "description": txt})
 
-    df = pd.DataFrame(rows)
-    df.to_csv(args.out_csv, index=False)
-    print(f" Saved RAG predictions to {args.out_csv}")
+    pd.DataFrame(rows).to_csv(args.out_csv, index=False)
+    print(f"Saved RAG predictions to {args.out_csv}")
 
 
 if __name__ == "__main__":
