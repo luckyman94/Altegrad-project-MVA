@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import argparse
 import sys
 from pathlib import Path
@@ -15,16 +12,12 @@ from torch_geometric.data import Batch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
-# ===== Project imports =====
 from data_utils import PreprocessedGraphDataset
 from sft_llm_mapper.models.mapper import LinearMapper
 from sft_llm_mapper.models.llm_factory import load_llm_embedder
 from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
 
 
-# ======================================================
-# Dataset
-# ======================================================
 class GraphTextAlignmentDataset(Dataset):
     def __init__(self, base: PreprocessedGraphDataset):
         self.base = base
@@ -65,9 +58,6 @@ def load_graph_encoder_simple(ckpt_path, device):
     return model
 
 
-# ======================================================
-# Training loop (Stage-1 alignment)
-# ======================================================
 def train_stage1(
     graph_encoder,
     mapper,
@@ -115,7 +105,6 @@ def train_stage1(
     best_val = float("inf")
 
     for epoch in range(1, epochs + 1):
-        # -------- TRAIN --------
         mapper.train()
         tr_loss = 0.0
 
@@ -124,12 +113,12 @@ def train_stage1(
             optimizer.zero_grad(set_to_none=True)
 
             with torch.no_grad():
-                g_emb = graph_encoder(graphs)        # [B, dim_graph]
+                g_emb = graph_encoder(graphs)        
 
-            soft = mapper(g_emb).mean(dim=1)         # [B, dim_llm]
+            soft = mapper(g_emb).mean(dim=1)         
 
             with torch.no_grad():
-                tgt = llm_embedder.encode(texts)     # [B, dim_llm]
+                tgt = llm_embedder.encode(texts)     
 
             loss = criterion(soft, tgt)
             loss.backward()
@@ -139,7 +128,6 @@ def train_stage1(
 
         tr_loss /= max(1, len(train_loader))
 
-        # -------- VAL --------
         mapper.eval()
         va_loss = 0.0
 
@@ -179,9 +167,6 @@ def train_stage1(
     return best_val
 
 
-# ======================================================
-# Argparse
-# ======================================================
 def parse_args():
     p = argparse.ArgumentParser("Stage-1 Graph → LLM Alignment")
 
@@ -201,40 +186,31 @@ def parse_args():
     return p.parse_args()
 
 
-# ======================================================
-# Main
-# ======================================================
 def main():
     args = parse_args()
     device = args.device if torch.cuda.is_available() else "cpu"
 
-    # -------- Load graph encoder --------
     graph_encoder = load_graph_encoder_simple(
     ckpt_path=args.graph_ckpt,
     device=device,
 )
 
-
     dim_graph = graph_encoder.cfg.out_dim
 
-    # -------- Load LLM embedder (Stage-1 ONLY) --------
     llm_embedder = load_llm_embedder(
         llm_name=args.llm,
         device=device,
     )
 
-    # -------- Mapper --------
     mapper = LinearMapper(
         dim_graph=dim_graph,
         dim_llm=llm_embedder.hidden_size,
         num_soft_tokens=args.num_soft_tokens,
     )
 
-    # -------- Datasets --------
     train_ds = PreprocessedGraphDataset(args.train_data)
     val_ds = PreprocessedGraphDataset(args.val_data)
 
-    # -------- Train --------
     train_stage1(
         graph_encoder=graph_encoder,
         mapper=mapper,
