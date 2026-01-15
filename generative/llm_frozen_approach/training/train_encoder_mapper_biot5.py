@@ -50,6 +50,8 @@ def main():
     val_graphs = PreprocessedGraphDataset(
         args.train_graphs.replace("train", "validation")
     )
+    llm, tokenizer = load_biot5(device)
+    llm_dim = get_llm_dim(llm)
 
     train_ds = GraphTextDataset(
     train_graphs,
@@ -72,8 +74,6 @@ def main():
     train_loader = DataLoader(train_ds, args.batch_size, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_ds, args.batch_size, shuffle=False, collate_fn=collate_fn)
 
-    llm, tokenizer = load_biot5(device)
-    llm_dim = get_llm_dim(llm)
 
     encoder_prompt_ids = build_encoder_prompt(tokenizer, device)
     encoder_prompt_embeds = llm.encoder.embed_tokens(encoder_prompt_ids)
