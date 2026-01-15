@@ -6,6 +6,12 @@ import torch.nn.functional as F
 import pandas as pd
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT))
+from losses.infonce import infonce_loss
 
 from data_utils import (
     load_id2emb,
