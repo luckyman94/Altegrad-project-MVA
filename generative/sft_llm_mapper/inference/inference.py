@@ -74,6 +74,9 @@ def main():
     p.add_argument("--test_data", required=True)
     p.add_argument("--encoder_ckpt", required=True)
     p.add_argument("--mapper_ckpt", required=True)
+    p.add_argument("--lora_path", type=str, required=True,
+               help="Path to trained LoRA adapters")
+
 
     p.add_argument("--llm", choices=["gpt2", "biogpt"], required=True)
 
@@ -136,10 +139,15 @@ def main():
     # Load LLM + LoRA
     # --------------------------------------------------
     llm, tokenizer, _ = load_llm(
-        llm_name=args.llm,
-        device=device,
-        use_lora=True,
+    llm_name=args.llm,
+    device=device,
+    use_lora=False,   # important
     )
+
+    from peft import PeftModel
+    llm = PeftModel.from_pretrained(llm, args.lora_path).to(device)
+    llm.eval()
+
 
     # --------------------------------------------------
     # Inference
