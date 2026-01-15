@@ -166,8 +166,9 @@ def main():
 
 
     rows = []
-
+    i = 0
     for batch in tqdm(test_loader, desc="Inference (RAG)"):
+        i+=1
         graphs = Batch.from_data_list(batch)
         ids = [g.id for g in batch]
 
@@ -186,7 +187,8 @@ def main():
         for gid, txt in zip(ids, texts):
             rows.append({"ID": gid, "description": txt})
 
-        break 
+        if i == 2:
+            break 
 
 
     pd.DataFrame(rows).to_csv(args.out_csv, index=False)
