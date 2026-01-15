@@ -1,38 +1,133 @@
-import faiss
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import argparse
+import sys
+from pathlib import Path
+
 import torch
 import numpy as np
+import faiss
 from tqdm import tqdm
 
+# --------------------------------------------------
+# Path setup
+# --------------------------------------------------
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(ROOT))
+
+# --------------------------------------------------
+# Project imports
+# --------------------------------------------------
 from data_utils import PreprocessedGraphDataset
 from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
 
+
+# ==================================================
+# Load graph encoder from checkpoint
+# ==================================================
+def load_graph_encoder_from_ckpt(ckpt_path: str, device: str):
+    ckpt = torch.load(ckpt_path, map_location=device)
+
+    cfg = GraphEncoderConfig(
+        hidden_dim=ckpt["gnn_hidden_dim"],
+        out_dim=ckpt["gnn_out_dim"],
+        num_layers=ckpt["num_layers"],
+        num_heads=ckpt["num_heads"],
+        dropout=ckpt["dropout"],
+        attn_type=ckpt["attn_type"],
+        pool=ckpt["pool"],
+        normalize_out=ckpt["normalize_out"],
+    )
+
+    model = GraphEncoder(cfg).to(device)
+    model.load_state_dict(ckpt["graph_encoder_state_dict"])
+    model.eval()
+
+    print(f"✅ Loaded graph encoder from {ckpt_path}")
+    print(f"   → embedding dim = {cfg.out_dim}")
+
+    return model, cfg.out_dim
+
+
+# ==================================================
+# Build FAISS index
+# ==================================================
 @torch.no_grad()
 def build_faiss_index(
     graph_encoder,
     train_ds,
     device,
-    out_path,
+    out_index_path: str,
 ):
     graph_encoder.eval().to(device)
 
-    all_embs = []
-    all_texts = []
+    embeddings = []
+    texts = []
 
     for g in tqdm(train_ds, desc="Encoding train graphs"):
         z = graph_encoder(g.to(device).unsqueeze(0))  # [1, D]
         z = z.cpu().numpy()
-        z = z / np.linalg.norm(z, axis=1, keepdims=True)
+        z = z / np.linalg.norm(z, axis=1, keepdims=True)  # cosine norm
 
-        all_embs.append(z)
-        all_texts.append(g.description)
+        embeddings.append(z)
+        texts.append(g.description)
 
-    X = np.vstack(all_embs).astype("float32")
-
+    X = np.vstack(embeddings).astype("float32")
     dim = X.shape[1]
-    index = faiss.IndexFlatIP(dim)
+
+    print(f"\n📐 Building FAISS index (N={X.shape[0]}, dim={dim})")
+
+    index = faiss.IndexFlatIP(dim)  # cosine similarity
     index.add(X)
 
-    faiss.write_index(index, out_path)
-    torch.save(all_texts, out_path + ".texts")
+    faiss.write_index(index, out_index_path)
+    torch.save(texts, out_index_path + ".texts.pt")
 
-    print(f"✅ FAISS index saved to {out_path}")
+    print(f"\n✅ FAISS index saved to: {out_index_path}")
+    print(f"✅ Text corpus saved to: {out_index_path}.texts.pt")
+
+
+# ==================================================
+# Main
+# ==================================================
+def main():
+    p = argparse.ArgumentParser("Build FAISS index over graph embeddings")
+
+    p.add_argument("--train_data", required=True, help="Path to train_graphs.pkl")
+    p.add_argument("--encoder_ckpt", required=True, help="Path to graph encoder checkpoint")
+    p.add_argument("--out_index", default="graph_faiss.index", help="Output FAISS index path")
+    p.add_argument("--device", default="cuda")
+
+    args = p.parse_args()
+    device = args.device if torch.cuda.is_available() else "cpu"
+
+    print(f"\n🚀 Building FAISS graph index on device: {device}\n")
+
+    # --------------------------------------------------
+    # Load dataset
+    # --------------------------------------------------
+    train_ds = PreprocessedGraphDataset(args.train_data)
+    print(f"📦 Loaded {len(train_ds)} training graphs")
+
+    # --------------------------------------------------
+    # Load encoder
+    # --------------------------------------------------
+    graph_encoder, _ = load_graph_encoder_from_ckpt(
+        args.encoder_ckpt,
+        device,
+    )
+
+    # --------------------------------------------------
+    # Build FAISS
+    # --------------------------------------------------
+    build_faiss_index(
+        graph_encoder=graph_encoder,
+        train_ds=train_ds,
+        device=device,
+        out_index_path=args.out_index,
+    )
+
+
+if __name__ == "__main__":
+    main()
