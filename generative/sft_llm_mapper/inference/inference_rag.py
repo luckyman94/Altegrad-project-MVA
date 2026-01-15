@@ -186,6 +186,8 @@ def main():
         for gid, txt in zip(ids, texts):
             rows.append({"ID": gid, "description": txt})
 
+        break 
+
 
     pd.DataFrame(rows).to_csv(args.out_csv, index=False)
     print(f"Saved RAG predictions to {args.out_csv}")
