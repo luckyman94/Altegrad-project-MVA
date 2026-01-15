@@ -48,13 +48,14 @@ def generate_batch_rag(
 
 
 
-    inputs_embeds = fuse_soft_tokens_and_rag(
-        llm=llm,
-        tokenizer=tokenizer,
-        soft_tokens=soft,
-        retrieved_texts=retrieved_texts,
-        device=device,
-    )
+    inputs_embeds, attention_mask = fuse_soft_tokens_and_rag(
+    llm=llm,
+    tokenizer=tokenizer,
+    soft_tokens=soft,
+    retrieved_texts=retrieved_texts,
+    device=device,
+)
+
 
     attention_mask = torch.ones(
         inputs_embeds.shape[:2],
