@@ -15,6 +15,7 @@ import os
 from transformers import get_linear_schedule_with_warmup
 from dataset.dataset import GraphTextDataset, GraphOnlyDataset
 from torch.utils.data import DataLoader
+from llm_frozen_approach.models.llm_factory import load_llm
 
 import pandas as pd
 
@@ -64,20 +65,17 @@ def generate_from_graphs(
 ):
     graph_batch = Batch.from_data_list(graphs).to(device)
 
-    # 1. Encode graph
-    graph_emb = graph_encoder(graph_batch)          # (B, Dg)
-    soft_prompt = mapper(graph_emb)                 # (B, S, Dllm)
+    graph_emb = graph_encoder(graph_batch)         
+    soft_prompt = mapper(graph_emb)                
 
     B, S, _ = soft_prompt.shape
 
-    # 2. Attention mask for soft tokens
     attention_mask = torch.ones(
         (B, S),
         device=device,
         dtype=torch.long,
     )
 
-    # 3. Generation
     end_id = tokenizer.convert_tokens_to_ids("<END>")
 
     outputs = llm.generate(
@@ -118,7 +116,7 @@ def run_inference_on_test(
         collate_fn=lambda x: x,
     )
 
-    llm, tokenizer = load_gpt2(device)
+    llm, tokenizer = load_llm(args.llm, device)
     graph_encoder, mapper = load_trained_model(checkpoint_path, device)
 
     graph_encoder.to(device)
@@ -164,6 +162,13 @@ if __name__ == "__main__":
         required=True,
         help="Path to test graphs .pkl file",
     )
+    parser.add_argument(
+    "--llm",
+    type=str,
+    default="gpt2",
+    choices=["gpt2", "biogpt"],
+    help="Which LLM backend to use"
+)
     parser.add_argument(
         "--checkpoint_path",
         type=str,
