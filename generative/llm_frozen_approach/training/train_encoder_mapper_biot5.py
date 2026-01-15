@@ -51,8 +51,18 @@ def main():
         args.train_graphs.replace("train", "validation")
     )
 
-    train_ds = GraphTextDataset(train_graphs, max_length=args.max_text_len)
-    val_ds = GraphTextDataset(val_graphs, max_length=args.max_text_len)
+    train_ds = GraphTextDataset(
+    train_graphs,
+    tokenizer=tokenizer,
+    max_length=args.max_text_len,
+)
+
+    val_ds = GraphTextDataset(
+        val_graphs,
+        tokenizer=tokenizer,
+        max_length=args.max_text_len,
+    )
+
 
     collate_fn = lambda x: {
         "graph": [item["graph"] for item in x],
