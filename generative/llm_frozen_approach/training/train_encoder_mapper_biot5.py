@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
 from data_utils import PreprocessedGraphDataset
-from dataset.dataset import GraphTextDataset
-from models.encoder import GraphEncoder, GraphEncoderConfig
-from models.mapper import LinearMapper
-from models.biot5 import load_biot5, get_llm_dim
+from llm_frozen_approach.dataset.dataset import GraphTextDataset
+from llm_frozen_approach.models.encoder import GraphEncoder, GraphEncoderConfig
+from llm_frozen_approach.models.mapper import LinearMapper
+from llm_frozen_approach.models.biot5 import load_biot5, get_llm_dim
 
 def build_encoder_prompt(tokenizer, device):
     text = "Describe the following molecule:"
