@@ -1,8 +1,6 @@
 # ALTEGRAD Project — MVA (ENS Paris-Saclay)
 
-This repository contains the project developed for the **ALTEGRAD** course  
-(*Advanced Learning for Text and Graph Data*) of the **Master MVA**  
-(**Mathématiques, Vision, Apprentissage**) at **ENS Paris-Saclay**.
+This repository contains the project developed for the **ALTEGRAD** course (*Advanced Learning for Text and Graph Data*) of the **Master MVA** (**Mathématiques, Vision, Apprentissage**) at **ENS Paris-Saclay**.
 
 The objective of the project is to explore different approaches for **molecular graph-to-text generation**, by leveraging both **retrieval-based** and **generative** paradigms.
 
