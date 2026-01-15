@@ -6,7 +6,6 @@ from peft import LoraConfig, get_peft_model, TaskType
 def load_gpt2(
     device="cuda",
     model_name="gpt2",
-    use_lora=False,
     lora_r=8,
     lora_alpha=16,
     lora_dropout=0.05,

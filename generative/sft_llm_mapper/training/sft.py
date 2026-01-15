@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import List
 
 import torch
-import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch_geometric.data import Batch
 from tqdm import tqdm

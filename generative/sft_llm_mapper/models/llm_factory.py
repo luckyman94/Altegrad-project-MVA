@@ -7,11 +7,6 @@ from transformers import AutoTokenizer, AutoModel
 
 
 class FrozenLLMEmbedder(nn.Module):
-    """
-    Text -> embedding wrapper
-    Compatible GPT-2 / BioGPT
-    Used ONLY in Stage-1 alignment
-    """
 
     def __init__(self, model_name: str, device="cuda"):
         super().__init__()
@@ -38,8 +33,8 @@ class FrozenLLMEmbedder(nn.Module):
             return_tensors="pt",
         ).to(self.device)
 
-        h = self.model(**toks).last_hidden_state   # [B, L, d]
-        emb = h.mean(dim=1)                        # [B, d]
+        h = self.model(**toks).last_hidden_state   
+        emb = h.mean(dim=1)                        
         emb = emb / (emb.norm(dim=-1, keepdim=True) + 1e-12)
         return emb
 
@@ -70,9 +65,6 @@ def load_llm(llm_name: str, device: str, use_lora: bool = False):
 
 
 def load_llm_embedder(llm_name: str, device: str):
-    """
-    For Stage-1 only (alignment)
-    """
     if llm_name == "gpt2":
         return FrozenLLMEmbedder("gpt2", device)
     elif llm_name == "biogpt":
