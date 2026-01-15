@@ -11,31 +11,51 @@ def fuse_soft_tokens_and_rag(
     device,
 ):
     emb_layer = llm.get_input_embeddings()
-    dtype = emb_layer.weight.dtype
+    model_dtype = emb_layer.weight.dtype
 
-    soft_tokens = soft_tokens.to(dtype)
+    soft_tokens = soft_tokens.to(model_dtype)
 
-    rag_flat = [
-        " ".join(texts) for texts in retrieved_texts
-    ]
+    batch_inputs = []
 
-    rag_inputs = tokenizer(
-        rag_flat,
-        padding=True,
-        truncation=True,
-        return_tensors="pt",
-    ).to(device)
+    for i in range(soft_tokens.size(0)):
+        soft_i = soft_tokens[i]  # [S, D]
 
-    rag_embeds = emb_layer(rag_inputs.input_ids).to(dtype)
+        # -------------------------
+        # CASE 1 — RAG available
+        # -------------------------
+        if retrieved_texts[i] is not None:
+            context = "\n".join(retrieved_texts[i])
 
-    prompt_inputs = tokenizer(
-        ["Describe the molecule."] * soft_tokens.size(0),
-        return_tensors="pt",
-    ).to(device)
+            prompt = (
+                "Context:\n"
+                f"{context}\n\n"
+                "Task: Describe the molecule."
+            )
 
-    prompt_embeds = emb_layer(prompt_inputs.input_ids).to(dtype)
+        # -------------------------
+        # CASE 2 — NO RAG
+        # -------------------------
+        else:
+            prompt = "Describe the molecule."
 
-    return torch.cat(
-        [soft_tokens, rag_embeds, prompt_embeds],
-        dim=1,
+        tok = tokenizer(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            padding=False,
+        ).to(device)
+
+        emb_prompt = emb_layer(tok.input_ids).squeeze(0)
+        emb_prompt = emb_prompt.to(model_dtype)
+
+        fused = torch.cat(
+            [soft_i, emb_prompt],
+            dim=0,
+        )
+
+        batch_inputs.append(fused)
+
+    return torch.nn.utils.rnn.pad_sequence(
+        batch_inputs,
+        batch_first=True,
     )

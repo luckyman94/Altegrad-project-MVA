@@ -40,7 +40,12 @@ def generate_batch_rag(
     soft = mapper(z_graph)               
 
     retrieved_texts = retriever.search(z_graph, k=3)
-    print(retrieved_texts[0])
+
+    
+    for i in range(len(retrieved_texts)):
+        if retrieved_texts[i] is None or len(retrieved_texts[i]) == 0:
+            retrieved_texts[i] = None  
+
 
 
     inputs_embeds = fuse_soft_tokens_and_rag(
