@@ -15,6 +15,7 @@ from peft import PeftModel
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
+from sft_llm_mapper.rag.graph_retriever import GraphRetriever
 
 # ===================== Imports projet =====================
 from data_utils import PreprocessedGraphDataset
@@ -24,25 +25,7 @@ from sft_llm_mapper.models.llm_factory import load_llm
 from sft_llm_mapper.rag.fusion import fuse_soft_tokens_and_rag
 
 
-# ======================================================
-# Dummy Retriever (baseline)
-# ======================================================
-class DummyRetriever:
-    """
-    Baseline retriever : retourne toujours les mêmes textes.
-    À remplacer par FAISS plus tard.
-    """
 
-    def __init__(self, texts: List[str]):
-        self.texts = texts
-
-    def search(self, query_emb: torch.Tensor, k: int = 3):
-        return [[t for t in self.texts[:k]] for _ in range(query_emb.size(0))]
-
-
-# ======================================================
-# Generation (RAG)
-# ======================================================
 @torch.no_grad()
 def generate_batch_rag(
     graphs,
@@ -63,6 +46,8 @@ def generate_batch_rag(
 
     # -------- Retrieve --------
     retrieved_texts = retriever.search(z_graph, k=3)
+    print(retrieved_texts[0])
+
 
     # -------- Fuse soft + RAG --------
     inputs_embeds = fuse_soft_tokens_and_rag(
@@ -179,13 +164,10 @@ def main():
     # --------------------------------------------------
     # Retriever
     # --------------------------------------------------
-    retriever = DummyRetriever(
-        texts=[
-            "This molecule contains aromatic rings.",
-            "Functional groups include hydroxyl and amine.",
-            "Likely exhibits polar behavior.",
-        ]
-    )
+    retriever = GraphRetriever(
+    index_path="graph_index.faiss",
+    texts_path="graph_index.faiss.texts",
+)
 
     # --------------------------------------------------
     # Inference
@@ -210,6 +192,8 @@ def main():
 
         for gid, txt in zip(ids, texts):
             rows.append({"ID": gid, "description": txt})
+
+        break  # DEBUG
 
     pd.DataFrame(rows).to_csv(args.out_csv, index=False)
     print(f"Saved RAG predictions to {args.out_csv}")
