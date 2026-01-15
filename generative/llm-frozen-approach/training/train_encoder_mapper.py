@@ -29,7 +29,7 @@ NUM_SOFT_TOKENS = 4
 HIDDEN_DIM = 256
 
 
-def save_checkpoint(graph_encoder, mapper, args, path, epoch, val_loss):
+def save_checkpoint(graph_encoder, mapper, path, epoch, val_loss):
     os.makedirs(path, exist_ok=True)
 
     torch.save(
@@ -59,6 +59,8 @@ def parse_args():
                         help="Path to train_graphs.pkl")
 
     parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--checkpoint_path", type=str, default="checkpoints",
+                        help="Path to save checkpoints")
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--max_text_len", type=int, default=128)
@@ -152,9 +154,6 @@ def main():
         collate_fn=collate_fn,
     )
 
-    # --------------------
-    # 2. Models
-    # --------------------
     graph_encoder = GraphEncoder(
     hidden_dim=args.hidden_dim,
     num_layers=4,
@@ -192,19 +191,15 @@ def main():
     best_val_loss = float("inf")
 
     num_training_steps = args.epochs * len(train_loader)
-    num_warmup_steps = int(0.1 * num_training_steps)  # 10% warmup
+    num_warmup_steps = int(0.1 * num_training_steps) 
 
     scheduler = get_linear_schedule_with_warmup(
     optimizer,
     num_warmup_steps=num_warmup_steps,
     num_training_steps=num_training_steps,
 )
-    # --------------------
-    # 3. Training + validation
-    # --------------------
     for epoch in range(start_epoch,args.epochs):
 
-        # ===== TRAIN =====
         graph_encoder.train()
         mapper.train()
 
@@ -233,9 +228,9 @@ def main():
 
             inputs_embeds = torch.cat(
                 [
-                    prompt_embeds_batch,  # prompt texte
-                    soft_prompt,          # graph soft token
-                    text_emb,             # texte cible
+                    prompt_embeds_batch,  
+                    soft_prompt,          
+                    text_emb,             
                 ],
                 dim=1,
 )
@@ -274,7 +269,6 @@ def main():
 
         train_loss /= len(train_loader)
 
-        # ===== VALIDATION =====
         graph_encoder.eval()
         mapper.eval()
 
@@ -346,8 +340,7 @@ def main():
             save_checkpoint(
                 graph_encoder,
                 mapper,
-                args,
-                path="checkpoints",
+                path=args.checkpoint_path,
                 epoch=epoch + 1,
                 val_loss=val_loss,
             )
