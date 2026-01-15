@@ -84,7 +84,7 @@ def eval_retrieval(data_path, emb_dict, mol_enc, device, temperature=0.07):
     all_mol = torch.cat(all_mol, dim=0)
     all_txt = torch.cat(all_txt, dim=0)
 
-    sims = infonce_loss(all_mol, all_txt, temperature)
+    sims = (all_txt @ all_mol.t()) / temperature
 
     ranks = sims.argsort(dim=-1, descending=True)
 
