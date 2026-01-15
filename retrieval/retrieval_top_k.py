@@ -15,7 +15,7 @@ from data_utils import (
 )
 
 from gine_encoder.encoder import MolGNN
-from gps_encoder.encoder import load_graph_encoder_from_checkpoint
+from gps_encoder.encoder import GraphEncoder, GraphEncoderConfig
 
 
 
