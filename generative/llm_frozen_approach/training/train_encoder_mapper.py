@@ -33,7 +33,8 @@ def save_checkpoint(graph_encoder, mapper, path, epoch, val_loss):
             "mapper_state_dict": mapper.state_dict(),
 
             # architecture
-            "hidden_dim": mapper.dim_graph,
+            "gnn_hidden_dim": graph_encoder.cfg.hidden_dim,
+            "gnn_out_dim": graph_encoder.cfg.out_dim,  
             "llm_dim": mapper.dim_llm,
             "num_soft_tokens": mapper.num_soft_tokens,
 
