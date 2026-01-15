@@ -165,7 +165,7 @@ def main():
 
 
     mapper = LinearMapper(
-        dim_graph=args.hidden_dim,
+        dim_graph=llm.config.n_embd,
         dim_llm=llm.config.n_embd, 
         num_soft_tokens = args.num_soft_tokens
     ).to(device)
