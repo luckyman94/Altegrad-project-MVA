@@ -19,7 +19,7 @@ def load_biogpt(
 
     llm = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        torch_dtype= torch.float32
     ).to(device)
 
     for p in llm.parameters():
