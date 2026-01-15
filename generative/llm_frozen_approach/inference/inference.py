@@ -22,14 +22,20 @@ import pandas as pd
 def load_trained_model(checkpoint_path, device):
     ckpt = torch.load(checkpoint_path, map_location=device)
 
-    graph_encoder = GraphEncoder(
-        hidden_dim=ckpt["hidden_dim"],
+    cfg = GraphEncoderConfig(
+        hidden_dim=ckpt["gnn_hidden_dim"],
+        out_dim=ckpt["gnn_out_dim"],   #
         num_layers=4,
         num_heads=4,
-    ).to(device)
+        dropout=0.1,
+        pool="mean",
+        normalize_out=True,
+    )
+    
+    graph_encoder = GraphEncoder(cfg).to(device)
 
     mapper = LinearMapper(
-        dim_graph=ckpt["hidden_dim"],
+        dim_graph=ckpt["gnn_out_dim"],
         dim_llm=ckpt["llm_dim"],
         num_soft_tokens=ckpt["num_soft_tokens"]
     )
