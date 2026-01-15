@@ -1,5 +1,5 @@
-from gpt2 import load_gpt2
-from biogpt import load_biogpt
+from .gpt2 import load_gpt2
+from .biogpt import load_biogpt
 
 
 def load_llm(llm_name: str, device: str):
