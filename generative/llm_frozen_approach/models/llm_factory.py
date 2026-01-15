@@ -21,3 +21,5 @@ def load_llm(llm_name: str, device: str):
             f"Unknown LLM '{llm_name}'. "
             f"Available: gpt2 | biogpt "
         )
+
+

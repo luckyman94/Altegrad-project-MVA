@@ -158,7 +158,7 @@ def main():
 
     cfg = GraphEncoderConfig(
     hidden_dim=args.hidden_dim,
-    out_dim=llm.config.n_embd,  
+    out_dim=llm_dim,  
     num_layers=4,
     num_heads=4,
     dropout=0.1,
@@ -168,8 +168,8 @@ def main():
 
 
     mapper = LinearMapper(
-        dim_graph=llm.config.n_embd,
-        dim_llm=llm.config.n_embd, 
+        dim_graph=llm_dim,
+        dim_llm=llm_dim, 
         num_soft_tokens = args.num_soft_tokens
     ).to(device)
 
