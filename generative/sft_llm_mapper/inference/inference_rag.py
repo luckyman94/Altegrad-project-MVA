@@ -87,6 +87,21 @@ def main():
     p.add_argument("--encoder_ckpt", required=True)
     p.add_argument("--mapper_ckpt", required=True)
 
+    p.add_argument(
+    "--faiss_index",
+    type=str,
+    required=True,
+    help="Path to FAISS index built on train graph embeddings",
+)
+
+    p.add_argument(
+        "--faiss_texts",
+        type=str,
+        required=True,
+        help="Path to texts associated with FAISS index",
+    )
+
+
     p.add_argument("--llm", choices=["gpt2", "biogpt"], required=True)
     p.add_argument("--lora_path", required=True, help="Path to trained LoRA adapter")
 
@@ -165,9 +180,10 @@ def main():
     # Retriever
     # --------------------------------------------------
     retriever = GraphRetriever(
-    index_path="graph_index.faiss",
-    texts_path="graph_index.faiss.texts",
+    index_path=args.faiss_index,
+    texts_path=args.faiss_texts,
 )
+
 
     # --------------------------------------------------
     # Inference
