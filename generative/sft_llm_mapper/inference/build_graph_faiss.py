@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import argparse
 import sys
 from pathlib import Path
@@ -11,22 +8,13 @@ import faiss
 from tqdm import tqdm
 from torch_geometric.data import Batch
 
-# --------------------------------------------------
-# Path setup
-# --------------------------------------------------
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
-# --------------------------------------------------
-# Project imports
-# --------------------------------------------------
 from data_utils import PreprocessedGraphDataset
 from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
 
 
-# ==================================================
-# Load graph encoder from checkpoint
-# ==================================================
 def load_graph_encoder_from_ckpt(ckpt_path: str, device: str):
     ckpt = torch.load(ckpt_path, map_location=device)
 
@@ -45,15 +33,11 @@ def load_graph_encoder_from_ckpt(ckpt_path: str, device: str):
     model.load_state_dict(ckpt["graph_encoder_state_dict"])
     model.eval()
 
-    print(f"✅ Loaded graph encoder from {ckpt_path}")
-    print(f"   → embedding dim = {cfg.out_dim}")
+    print(f"Loaded graph encoder from {ckpt_path}")
 
     return model, cfg.out_dim
 
 
-# ==================================================
-# Build FAISS index
-# ==================================================
 @torch.no_grad()
 def build_faiss_index(
     graph_encoder,
@@ -70,7 +54,7 @@ def build_faiss_index(
         batch = Batch.from_data_list([g]).to(device)
         z = graph_encoder(batch)
         z = z.cpu().numpy()
-        z = z / np.linalg.norm(z, axis=1, keepdims=True)  # cosine norm
+        z = z / np.linalg.norm(z, axis=1, keepdims=True) 
 
         embeddings.append(z)
         texts.append(g.description)
@@ -80,19 +64,16 @@ def build_faiss_index(
 
     print(f"\n📐 Building FAISS index (N={X.shape[0]}, dim={dim})")
 
-    index = faiss.IndexFlatIP(dim)  # cosine similarity
+    index = faiss.IndexFlatIP(dim)  
     index.add(X)
 
     faiss.write_index(index, out_index_path)
     torch.save(texts, out_index_path + ".texts.pt")
 
-    print(f"\n✅ FAISS index saved to: {out_index_path}")
-    print(f"✅ Text corpus saved to: {out_index_path}.texts.pt")
+    print(f"FAISS index saved to: {out_index_path}")
+    print(f"Text corpus saved to: {out_index_path}.texts.pt")
 
 
-# ==================================================
-# Main
-# ==================================================
 def main():
     p = argparse.ArgumentParser("Build FAISS index over graph embeddings")
 
@@ -104,25 +85,16 @@ def main():
     args = p.parse_args()
     device = args.device if torch.cuda.is_available() else "cpu"
 
-    print(f"\n🚀 Building FAISS graph index on device: {device}\n")
+    print(f"Building FAISS graph index on device: {device}\n")
 
-    # --------------------------------------------------
-    # Load dataset
-    # --------------------------------------------------
     train_ds = PreprocessedGraphDataset(args.train_data)
-    print(f"📦 Loaded {len(train_ds)} training graphs")
+    print(f"Loaded {len(train_ds)} training graphs")
 
-    # --------------------------------------------------
-    # Load encoder
-    # --------------------------------------------------
     graph_encoder, _ = load_graph_encoder_from_ckpt(
         args.encoder_ckpt,
         device,
     )
 
-    # --------------------------------------------------
-    # Build FAISS
-    # --------------------------------------------------
     build_faiss_index(
         graph_encoder=graph_encoder,
         train_ds=train_ds,

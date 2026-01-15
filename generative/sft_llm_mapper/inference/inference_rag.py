@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import argparse
 import sys
 from pathlib import Path
@@ -17,7 +14,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 from sft_llm_mapper.rag.graph_retriever import GraphRetriever
 
-# ===================== Imports projet =====================
 from data_utils import PreprocessedGraphDataset
 from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
 from sft_llm_mapper.models.mapper import LinearMapper
@@ -40,16 +36,13 @@ def generate_batch_rag(
 ):
     graphs = graphs.to(device)
 
-    # -------- Graph → soft tokens --------
-    z_graph = graph_encoder(graphs)      # [B, Dg]
-    soft = mapper(z_graph)               # [B, S, Dllm]
+    z_graph = graph_encoder(graphs)      
+    soft = mapper(z_graph)               
 
-    # -------- Retrieve --------
     retrieved_texts = retriever.search(z_graph, k=3)
     print(retrieved_texts[0])
 
 
-    # -------- Fuse soft + RAG --------
     inputs_embeds = fuse_soft_tokens_and_rag(
         llm=llm,
         tokenizer=tokenizer,
@@ -77,9 +70,6 @@ def generate_batch_rag(
     return tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 
-# ======================================================
-# Main
-# ======================================================
 def main():
     p = argparse.ArgumentParser("Graph → Text inference with RAG")
 
@@ -115,9 +105,6 @@ def main():
     args = p.parse_args()
     device = args.device if torch.cuda.is_available() else "cpu"
 
-    # --------------------------------------------------
-    # Dataset
-    # --------------------------------------------------
     test_ds = PreprocessedGraphDataset(args.test_data)
     test_loader = torch.utils.data.DataLoader(
         test_ds,
@@ -126,9 +113,6 @@ def main():
         collate_fn=lambda x: x,
     )
 
-    # --------------------------------------------------
-    # Graph encoder
-    # --------------------------------------------------
     enc_ckpt = torch.load(args.encoder_ckpt, map_location=device)
 
     cfg = GraphEncoderConfig(
@@ -146,9 +130,6 @@ def main():
     graph_encoder.load_state_dict(enc_ckpt["graph_encoder_state_dict"])
     graph_encoder.eval()
 
-    # --------------------------------------------------
-    # Mapper
-    # --------------------------------------------------
     map_ckpt = torch.load(args.mapper_ckpt, map_location=device)
 
     mapper = LinearMapper(
@@ -160,13 +141,10 @@ def main():
     mapper.load_state_dict(map_ckpt["mapper_state"])
     mapper.eval()
 
-    # --------------------------------------------------
-    # LLM + LoRA (CORRECT)
-    # --------------------------------------------------
     llm, tokenizer, _ = load_llm(
         llm_name=args.llm,
         device=device,
-        use_lora=False,   # ⬅️ important
+        use_lora=False,  
     )
 
     llm = PeftModel.from_pretrained(
@@ -176,18 +154,12 @@ def main():
 
     llm.eval()
 
-    # --------------------------------------------------
-    # Retriever
-    # --------------------------------------------------
     retriever = GraphRetriever(
     index_path=args.faiss_index,
     texts_path=args.faiss_texts,
 )
 
 
-    # --------------------------------------------------
-    # Inference
-    # --------------------------------------------------
     rows = []
 
     for batch in tqdm(test_loader, desc="Inference (RAG)"):
@@ -209,7 +181,6 @@ def main():
         for gid, txt in zip(ids, texts):
             rows.append({"ID": gid, "description": txt})
 
-        break  # DEBUG
 
     pd.DataFrame(rows).to_csv(args.out_csv, index=False)
     print(f"Saved RAG predictions to {args.out_csv}")

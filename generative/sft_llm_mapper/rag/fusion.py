@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import torch
 from typing import List
 
@@ -30,7 +28,6 @@ def fuse_soft_tokens_and_rag(
 
     rag_embeds = emb_layer(rag_inputs.input_ids).to(dtype)
 
-    # 🔥 PROMPT FINAL (OBLIGATOIRE)
     prompt_inputs = tokenizer(
         ["Describe the molecule."] * soft_tokens.size(0),
         return_tensors="pt",
