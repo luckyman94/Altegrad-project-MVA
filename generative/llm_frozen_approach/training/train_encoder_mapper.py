@@ -22,12 +22,6 @@ from dataset.dataset import GraphTextDataset, GraphOnlyDataset
 
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 8
-NUM_EPOCHS = 3
-LR = 1e-4
-MAX_TEXT_LEN = 128
-NUM_SOFT_TOKENS = 4
-HIDDEN_DIM = 256
 
 
 def save_checkpoint(graph_encoder, mapper, path, epoch, val_loss):
