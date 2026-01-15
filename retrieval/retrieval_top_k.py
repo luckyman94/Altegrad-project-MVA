@@ -156,10 +156,10 @@ def main():
         model.eval()
 
     elif args.encoder == "gps":
-        model = load_graph_encoder_from_checkpoint(
-            model_path=args.model_path,
-            device=device,
-        )
+        cfg = GraphEncoderConfig(out_dim=emb_dim)
+        model = GraphEncoder(cfg).to(device)
+        model.load_state_dict(torch.load(args.model_path, map_location=device))
+        model.eval()
 
     else:
         raise ValueError(f"Unknown encoder {args.encoder}")
