@@ -6,8 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
-from data_utils import PreprocessedGraphDataset, x_map, e_map
-from models.encoder import GraphEncoder
+from data_utils import PreprocessedGraphDataset
+from llm_frozen_approach.models.encoder import GraphEncoder
 from models.mapper import LinearMapper
 from models.gpt2 import load_gpt2
 from torch_geometric.data import Batch
