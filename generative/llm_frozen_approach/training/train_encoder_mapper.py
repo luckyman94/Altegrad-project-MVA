@@ -16,8 +16,7 @@ from tqdm import tqdm
 import os 
 from transformers import get_linear_schedule_with_warmup
 from dataset.dataset import GraphTextDataset, GraphOnlyDataset
-
-
+from llm_frozen_approach.models.llm_factory import load_llm
 
 
 
@@ -73,6 +72,15 @@ def parse_args():
     )
 
     parser.add_argument(
+    "--llm",
+    type=str,
+    default="gpt2",
+    choices=["gpt2", "biogpt"],
+    help="Which LLM backend to use"
+)
+
+
+    parser.add_argument(
     "--resume",
     type=str,
     default=None,
@@ -104,7 +112,7 @@ def main():
         args.train_graphs.replace("train", "validation")
     )
 
-    llm, tokenizer = load_gpt2(device)
+    llm, tokenizer, llm_dim = load_llm(args.llm, device)
 
     prompt_text = build_prompt()
 
