@@ -8,45 +8,37 @@ from typing import List
 def fuse_soft_tokens_and_rag(
     llm,
     tokenizer,
-    soft_tokens: torch.Tensor,
-    retrieved_texts: List[List[str]],
-    device: str,
+    soft_tokens,
+    retrieved_texts,
+    device,
 ):
-    """
-    soft_tokens: [B, S, D]
-    retrieved_texts: List[B][K] (strings)
-    """
-
-    B = soft_tokens.size(0)
     emb_layer = llm.get_input_embeddings()
     dtype = emb_layer.weight.dtype
 
-    # --------------------------------------------------
-    # Flatten retrieved texts
-    # --------------------------------------------------
-    flat_texts = []
-    for texts in retrieved_texts:
-        flat_texts.append("\n".join(texts))
+    soft_tokens = soft_tokens.to(dtype)
 
-    # --------------------------------------------------
-    # Tokenize retrieved docs
-    # --------------------------------------------------
-    tok = tokenizer(
-        flat_texts,
+    rag_flat = [
+        " ".join(texts) for texts in retrieved_texts
+    ]
+
+    rag_inputs = tokenizer(
+        rag_flat,
         padding=True,
         truncation=True,
         return_tensors="pt",
     ).to(device)
 
-    rag_emb = emb_layer(tok.input_ids).to(dtype=dtype)   # [B, L_rag, D]
-    soft_tokens = soft_tokens.to(dtype=dtype)
+    rag_embeds = emb_layer(rag_inputs.input_ids).to(dtype)
 
-    # --------------------------------------------------
-    # Concatenate
-    # --------------------------------------------------
-    fused = torch.cat(
-        [soft_tokens, rag_emb],
+    # 🔥 PROMPT FINAL (OBLIGATOIRE)
+    prompt_inputs = tokenizer(
+        ["Describe the molecule."] * soft_tokens.size(0),
+        return_tensors="pt",
+    ).to(device)
+
+    prompt_embeds = emb_layer(prompt_inputs.input_ids).to(dtype)
+
+    return torch.cat(
+        [soft_tokens, rag_embeds, prompt_embeds],
         dim=1,
     )
-
-    return fused
