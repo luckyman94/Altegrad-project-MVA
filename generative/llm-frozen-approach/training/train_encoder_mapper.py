@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
 from data_utils import PreprocessedGraphDataset, x_map, e_map
@@ -102,9 +102,7 @@ def main():
         else ("cuda" if torch.cuda.is_available() else "cpu")
     )
 
-    # --------------------
-    # 1. Load data
-    # --------------------
+ 
     train_graphs = PreprocessedGraphDataset(args.train_graphs)
     val_graphs = PreprocessedGraphDataset(
         args.train_graphs.replace("train", "validation")
