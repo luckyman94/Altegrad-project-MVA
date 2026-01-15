@@ -69,41 +69,62 @@ def collate_sft(batch):
 def build_inputs_with_soft_tokens(
     llm,
     tokenizer,
-    soft_tokens: torch.Tensor,
-    prompts: List[str],
-    targets: List[str],
-    device: str,
+    soft_tokens,
+    prompts,
+    targets,
+    device,
 ):
     tok_prompt = tokenizer(
         prompts,
         padding=True,
+        truncation=True,
         return_tensors="pt",
     ).to(device)
 
     tok_target = tokenizer(
         targets,
         padding=True,
+        truncation=True,
         return_tensors="pt",
     ).to(device)
 
-    emb_prompt = llm.get_input_embeddings()(tok_prompt.input_ids)
-    emb_target = llm.get_input_embeddings()(tok_target.input_ids)
+    emb_layer = llm.get_input_embeddings()
+    model_dtype = emb_layer.weight.dtype
 
+    # Cast soft tokens
+    soft_tokens = soft_tokens.to(dtype=model_dtype)
+
+    # Embed prompt + target
+    emb_prompt = emb_layer(tok_prompt.input_ids).to(dtype=model_dtype)
+    emb_target = emb_layer(tok_target.input_ids).to(dtype=model_dtype)
+
+    # --------------------------------------------------
+    # inputs = [ soft | prompt | target ]
+    # labels = [ IGN  | IGN    | target ]
+    # --------------------------------------------------
     inputs_embeds = torch.cat(
-        [soft_tokens, emb_prompt, emb_target[:, :-1]],
+        [soft_tokens, emb_prompt, emb_target],
         dim=1,
     )
+
+    ignore_len = soft_tokens.size(1) + emb_prompt.size(1)
 
     labels = torch.cat(
         [
             torch.full(
-                (soft_tokens.size(0), soft_tokens.size(1) + emb_prompt.size(1)),
+                (soft_tokens.size(0), ignore_len),
                 -100,
                 device=device,
+                dtype=torch.long,
             ),
-            tok_target.input_ids,
+            tok_target.input_ids.to(dtype=torch.long),
         ],
         dim=1,
+    )
+
+    assert inputs_embeds.size(1) == labels.size(1), (
+        inputs_embeds.size(),
+        labels.size(),
     )
 
     return inputs_embeds, labels
