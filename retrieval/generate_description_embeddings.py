@@ -9,9 +9,9 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel, T5EncoderModel
 
 
-# -----------------------------------------------------
-# Pooling strategies
-# -----------------------------------------------------
+
+#Pooling strategies
+
 def pool_embeddings(outputs, attention_mask, model_type, pooling):
     hidden = outputs.last_hidden_state
 
@@ -34,9 +34,7 @@ def pool_embeddings(outputs, attention_mask, model_type, pooling):
 def sanitize_model_name(model_name: str) -> str:
     return model_name.replace("/", "_")
 
-# -----------------------------------------------------
-# Main
-# -----------------------------------------------------
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default="bert-base-uncased")
@@ -51,9 +49,6 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # -------------------------------------------------
-    # Load tokenizer + model
-    # -------------------------------------------------
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -68,9 +63,7 @@ def main():
 
     os.makedirs(args.out_dir, exist_ok=True)
 
-    # -------------------------------------------------
-    # Process splits
-    # -------------------------------------------------
+
     for split in args.splits:
         print(f"\nProcessing {split} split")
 
