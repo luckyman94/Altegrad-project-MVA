@@ -290,6 +290,7 @@ def main():
     # --------------------------------------------------
     rows = []
 
+    i = 0
     for batch in tqdm(test_loader, desc="Inference (Naive RAG)"):
         graphs = Batch.from_data_list(batch)
         ids = [g.id for g in batch]
@@ -307,7 +308,10 @@ def main():
         )
 
         for gid, txt in zip(ids, texts):
+            i+=1
             rows.append({"ID": gid, "description": txt})
+        if i % 2 == 0:
+            print(rows)
 
     pd.DataFrame(rows).to_csv(args.out_csv, index=False)
     print(f"✅ Saved predictions to {args.out_csv}")
