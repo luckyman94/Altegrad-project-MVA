@@ -1,89 +1,222 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import argparse
 import sys
 from pathlib import Path
+from typing import List, Tuple
+
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
+from torch_geometric.data import Batch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
-import torch
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torch_geometric.data import Batch
-from tqdm import tqdm
 
-from sft_llm_mapper.models.encoder import GraphEncoder, GraphEncoderConfig
-from sft_llm_mapper.models.mapper import LinearMapper
-from sft_llm_mapper.models.gpt2 import load_gpt2  
+# ===== Project imports =====
 from data_utils import PreprocessedGraphDataset
-from sft_llm_mapper.dataset.dataset import GraphTextDataset
+from sft_llm_mapper.models.encoder import load_graph_encoder_from_checkpoint
+from sft_llm_mapper.models.mapper import LinearMapper
+from sft_llm_mapper.models.llm_factory import load_llm_embedder
 
 
-def mean_pool(x):
-    return x.mean(dim=1)
+# ======================================================
+# Dataset
+# ======================================================
+class GraphTextAlignmentDataset(Dataset):
+    def __init__(self, base: PreprocessedGraphDataset):
+        self.base = base
+
+    def __len__(self):
+        return len(self.base)
+
+    def __getitem__(self, idx):
+        g = self.base[idx]
+        if not hasattr(g, "description"):
+            raise AttributeError("Graph must have a `description` attribute")
+        return g, g.description
 
 
+def collate_stage1(batch: List[Tuple]):
+    graphs = Batch.from_data_list([g for g, _ in batch])
+    texts = [t for _, t in batch]
+    return graphs, texts
+
+
+# ======================================================
+# Training loop (Stage-1 alignment)
+# ======================================================
 def train_stage1(
-    graph_encoder_ckpt,
-    device="cuda",
-    epochs=5,
-    lr=3e-4,
+    graph_encoder,
+    mapper,
+    llm_embedder,
+    train_ds,
+    val_ds,
+    device,
+    epochs,
+    batch_size,
+    lr,
+    out_ckpt,
 ):
-    # -----------------------
-    # Load frozen components
-    # -----------------------
-    graph_encoder = GraphEncoder.load_from_checkpoint(graph_encoder_ckpt)
-    graph_encoder.to(device).eval()
+    graph_encoder.eval().to(device)
     for p in graph_encoder.parameters():
         p.requires_grad = False
 
-    llm, tokenizer = load_gpt2(device, use_lora=False)
-    llm.eval()
-    for p in llm.parameters():
-        p.requires_grad = False
+    mapper.train().to(device)
+    for p in mapper.parameters():
+        p.requires_grad = True
 
-    mapper = LinearMapper(
-        dim_graph=graph_encoder.cfg.out_dim,
-        dim_llm=llm.config.n_embd,
-        num_soft_tokens=4,
-    ).to(device)
+    optimizer = torch.optim.AdamW(
+        mapper.parameters(),
+        lr=lr,
+        weight_decay=1e-4,
+    )
+    criterion = nn.MSELoss()
 
-    optimizer = torch.optim.AdamW(mapper.parameters(), lr=lr)
+    train_loader = DataLoader(
+        GraphTextAlignmentDataset(train_ds),
+        batch_size=batch_size,
+        shuffle=True,
+        collate_fn=collate_stage1,
+    )
+    val_loader = DataLoader(
+        GraphTextAlignmentDataset(val_ds),
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=collate_stage1,
+    )
 
-    # -----------------------
-    # Data
-    # -----------------------
-    dataset = GraphTextDataset(...)
-    loader = DataLoader(dataset, batch_size=32, shuffle=True)
+    best_val = float("inf")
 
-    # -----------------------
-    # Training loop
-    # -----------------------
-    for epoch in range(epochs):
-        total_loss = 0.0
+    for epoch in range(1, epochs + 1):
+        # -------- TRAIN --------
+        mapper.train()
+        tr_loss = 0.0
 
-        for batch in tqdm(loader):
-            graphs = batch["graph"]
-            input_ids = batch["input_ids"].to(device)
-
-            graph_batch = Batch.from_data_list(graphs).to(device)
+        for graphs, texts in tqdm(train_loader, desc=f"Stage1 {epoch} [train]"):
+            graphs = graphs.to(device)
+            optimizer.zero_grad(set_to_none=True)
 
             with torch.no_grad():
-                graph_emb = graph_encoder(graph_batch)
-                text_emb = llm.get_input_embeddings()(input_ids)
-                text_emb = text_emb.mean(dim=1)
+                g_emb = graph_encoder(graphs)        # [B, dim_graph]
 
-            soft_prompt = mapper(graph_emb)
-            soft_mean = mean_pool(soft_prompt)
+            soft = mapper(g_emb).mean(dim=1)         # [B, dim_llm]
 
-            loss = F.mse_loss(soft_mean, text_emb)
+            with torch.no_grad():
+                tgt = llm_embedder.encode(texts)     # [B, dim_llm]
 
-            optimizer.zero_grad()
+            loss = criterion(soft, tgt)
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
+            tr_loss += loss.item()
 
-        print(f"[Stage1] Epoch {epoch} | loss={total_loss/len(loader):.4f}")
+        tr_loss /= max(1, len(train_loader))
 
-    torch.save(
-        {"mapper_state_dict": mapper.state_dict()},
-        "stage1_mapper.pt"
+        # -------- VAL --------
+        mapper.eval()
+        va_loss = 0.0
+
+        with torch.no_grad():
+            for graphs, texts in tqdm(val_loader, desc=f"Stage1 {epoch} [val]"):
+                graphs = graphs.to(device)
+                g_emb = graph_encoder(graphs)
+                soft = mapper(g_emb).mean(dim=1)
+                tgt = llm_embedder.encode(texts)
+                va_loss += criterion(soft, tgt).item()
+
+        va_loss /= max(1, len(val_loader))
+
+        print(
+            f"[Stage1] epoch={epoch} "
+            f"train={tr_loss:.4f} val={va_loss:.4f}"
+        )
+
+        if va_loss < best_val:
+            best_val = va_loss
+            torch.save(
+                {
+                    "mapper_state": mapper.state_dict(),
+                    "epoch": epoch,
+                    "val_loss": va_loss,
+                },
+                out_ckpt,
+            )
+            print(f"✓ Saved best mapper → {out_ckpt}")
+
+    return best_val
+
+
+# ======================================================
+# Argparse
+# ======================================================
+def parse_args():
+    p = argparse.ArgumentParser("Stage-1 Graph → LLM Alignment")
+
+    p.add_argument("--llm", type=str, choices=["gpt2", "biogpt"], required=True)
+    p.add_argument("--graph_ckpt", type=str, required=True)
+    p.add_argument("--train_data", type=str, required=True)
+    p.add_argument("--val_data", type=str, required=True)
+
+    p.add_argument("--num_soft_tokens", type=int, default=16)
+    p.add_argument("--epochs", type=int, default=10)
+    p.add_argument("--batch_size", type=int, default=16)
+    p.add_argument("--lr", type=float, default=3e-4)
+
+    p.add_argument("--out_ckpt", type=str, default="stage1_mapper.pt")
+    p.add_argument("--device", type=str, default="cuda")
+
+    return p.parse_args()
+
+
+# ======================================================
+# Main
+# ======================================================
+def main():
+    args = parse_args()
+    device = args.device if torch.cuda.is_available() else "cpu"
+
+    # -------- Load graph encoder --------
+    graph_encoder = load_graph_encoder_from_checkpoint(
+        model_path=args.graph_ckpt,
+        device=device,
     )
+
+    dim_graph = graph_encoder.cfg.out_dim
+
+    # -------- Load LLM embedder (Stage-1 ONLY) --------
+    llm_embedder = load_llm_embedder(
+        llm_name=args.llm,
+        device=device,
+    )
+
+    # -------- Mapper --------
+    mapper = LinearMapper(
+        dim_graph=dim_graph,
+        dim_llm=llm_embedder.hidden_size,
+        num_soft_tokens=args.num_soft_tokens,
+    )
+
+    # -------- Datasets --------
+    train_ds = PreprocessedGraphDataset(args.train_data)
+    val_ds = PreprocessedGraphDataset(args.val_data)
+
+    # -------- Train --------
+    train_stage1(
+        graph_encoder=graph_encoder,
+        mapper=mapper,
+        llm_embedder=llm_embedder,
+        train_ds=train_ds,
+        val_ds=val_ds,
+        device=device,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        out_ckpt=args.out_ckpt,
+    )
+
+
+if __name__ == "__main__":
+    main()
