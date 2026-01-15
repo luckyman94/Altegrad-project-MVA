@@ -166,7 +166,7 @@ def main():
 
 
     rows = []
-
+    i = 0
     for batch in tqdm(test_loader, desc="Inference (RAG)"):
         i+=1
         graphs = Batch.from_data_list(batch)
@@ -186,6 +186,10 @@ def main():
 
         for gid, txt in zip(ids, texts):
             rows.append({"ID": gid, "description": txt})
+
+        if i % 10 == 0:
+            print(rows)
+
 
         
 
